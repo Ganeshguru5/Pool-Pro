@@ -1,6 +1,7 @@
+
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -16,6 +17,7 @@ import {
 import {
   Form,
   FormControl,
+  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -32,15 +34,13 @@ import {
 } from '@/components/ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
-import { CalendarIcon, Check, ChevronsUpDown } from 'lucide-react';
+import { CalendarIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import useLocalStorageState from '@/hooks/use-local-storage-state';
 import { Competition, CompetitionStatus } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
-import { AGE_CATEGORIES } from '@/lib/categories';
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem } from '@/components/ui/command';
-import { Badge } from '@/components/ui/badge';
+import { AGE_CATEGORIES, getWeightCategoriesForAgeCategory } from '@/lib/categories';
 
 const formSchema = z.object({
   competition_name: z.string().min(3, { message: 'Competition name must be at least 3 characters.' }),
@@ -48,7 +48,8 @@ const formSchema = z.object({
   competition_date: z.date({ required_error: 'Competition date is required.' }),
   registration_deadline: z.date({ required_error: 'Registration deadline is required.' }),
   description: z.string().optional(),
-  age_categories: z.array(z.string()).min(1, { message: 'At least one age category must be selected.' }),
+  age_category: z.string().min(1, { message: 'Age category is required.' }),
+  weight_category: z.string().min(1, { message: 'Weight category is required.' }),
   status: z.enum(CompetitionStatus),
 });
 
@@ -70,10 +71,16 @@ export function CompetitionForm({ isOpen, setIsOpen, competition }: CompetitionF
       competition_name: '',
       address: '',
       description: '',
-      age_categories: [],
+      age_category: '',
+      weight_category: '',
       status: 'draft',
     },
   });
+
+  const selectedAgeCategoryId = form.watch('age_category');
+  const weightCategories = useMemo(() => {
+    return getWeightCategoriesForAgeCategory(selectedAgeCategoryId);
+  }, [selectedAgeCategoryId]);
 
   useEffect(() => {
     if (competition) {
@@ -90,10 +97,18 @@ export function CompetitionForm({ isOpen, setIsOpen, competition }: CompetitionF
         status: 'draft',
         competition_date: undefined,
         registration_deadline: undefined,
-        age_categories: [],
+        age_category: '',
+        weight_category: '',
       });
     }
   }, [competition, form, isOpen]);
+
+    // Reset weight category when age category changes
+  useEffect(() => {
+    if (isOpen) {
+        form.resetField('weight_category', { defaultValue: '' });
+    }
+  }, [selectedAgeCategoryId, isOpen, form]);
 
   const onSubmit = (data: CompetitionFormValues) => {
     const newCompetition: Competition = {
@@ -239,75 +254,68 @@ export function CompetitionForm({ isOpen, setIsOpen, competition }: CompetitionF
                 )}
               />
             </div>
-
-            <FormField
-              control={form.control}
-              name="age_categories"
-              render={({ field }) => (
-                <FormItem className="flex flex-col">
-                  <FormLabel>Age Categories</FormLabel>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <FormControl>
-                        <Button
-                          variant="outline"
-                          role="combobox"
-                          className={cn(
-                            "w-full justify-between",
-                            !field.value?.length && "text-muted-foreground"
-                          )}
-                        >
-                          <div className="flex gap-1 flex-wrap">
-                            {field.value?.length > 0 ? (
-                                field.value.map(val => AGE_CATEGORIES.find(ac => ac.id === val)?.name).map(name => (
-                                    <Badge key={name} variant="secondary">{name}</Badge>
-                                ))
-                            ) : (
-                                "Select age categories"
-                            )}
-                          </div>
-                          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                        </Button>
-                      </FormControl>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-full p-0">
-                      <Command>
-                        <CommandInput placeholder="Search categories..." />
-                        <CommandEmpty>No category found.</CommandEmpty>
-                        <CommandGroup className="max-h-64 overflow-y-auto">
-                          {AGE_CATEGORIES.map((category) => (
-                            <CommandItem
-                              key={category.id}
-                              onSelect={() => {
-                                const currentValues = field.value || [];
-                                const newValue = currentValues.includes(category.id)
-                                    ? currentValues.filter(v => v !== category.id)
-                                    : [...currentValues, category.id]
-                                field.onChange(newValue);
-                              }}
-                            >
-                                <Check
-                                    className={cn(
-                                    "mr-2 h-4 w-4",
-                                    field.value?.includes(category.id)
-                                        ? "opacity-100"
-                                        : "opacity-0"
-                                    )}
-                                />
-                                <div>
-                                    <p>{category.name}</p>
-                                    <p className="text-xs text-muted-foreground">{category.description}</p>
-                                </div>
-                            </CommandItem>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+               <FormField
+                  control={form.control}
+                  name="age_category"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Age Category</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value} defaultValue="">
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select an age category" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {AGE_CATEGORIES.map(category => (
+                            <SelectItem key={category.id} value={category.id}>
+                              {category.name}
+                            </SelectItem>
                           ))}
-                        </CommandGroup>
-                      </Command>
-                    </PopoverContent>
-                  </Popover>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+                        </SelectContent>
+                      </Select>
+                      {selectedAgeCategoryId && (
+                        <FormDescription>
+                            {AGE_CATEGORIES.find(ac => ac.id === selectedAgeCategoryId)?.description}
+                        </FormDescription>
+                      )}
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="weight_category"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Weight Category</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value} defaultValue="" disabled={!selectedAgeCategoryId || weightCategories.length === 0}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select a weight category" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {weightCategories.map(category => (
+                            <SelectItem key={category.id} value={category.id}>
+                              {category.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {field.value && (
+                          <FormDescription>
+                              {weightCategories.find(wc => wc.id === field.value)?.description}
+                          </FormDescription>
+                      )}
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+            </div>
             
             <FormField
               control={form.control}

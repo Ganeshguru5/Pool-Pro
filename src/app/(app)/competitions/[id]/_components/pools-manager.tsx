@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useMemo } from 'react';
@@ -149,6 +150,7 @@ export default function PoolsManager({ competition, participants, setParticipant
   const handleExportPDF = () => {
     const doc = new jsPDF();
     const pageWidth = doc.internal.pageSize.getWidth();
+    const { ageCategoryName, weightCategoryName, weightCategoryDescription } = getCategoryInfo(competition.age_category, competition.weight_category);
 
     pools.forEach(([poolName, poolParticipants], poolIndex) => {
       if (poolName === 'unassigned' && poolParticipants.length === 0) return;
@@ -174,72 +176,55 @@ export default function PoolsManager({ competition, participants, setParticipant
       doc.setFont('helvetica', 'bold');
       doc.text(poolName, pageWidth / 2, 42, { align: 'center' });
 
-      // Group participants by age/weight category for this pool
-      const participantsByCategory: { [key: string]: Participant[] } = {};
-      poolParticipants.forEach(p => {
-        const key = `${p.age_category}-${p.weight_category}`;
-        if (!participantsByCategory[key]) {
-          participantsByCategory[key] = [];
-        }
-        participantsByCategory[key].push(p);
-      });
       
       let yPos = 55;
+        if (yPos > 250) { // Add new page if content overflows
+          doc.addPage();
+          yPos = 20;
+        }
+        
+        doc.setFontSize(12);
+        doc.setFont('helvetica', 'bold');
+        doc.text(`${ageCategoryName} - ${weightCategoryName}`, 14, yPos);
+        if (weightCategoryDescription) {
+          doc.setFontSize(8);
+          doc.text(weightCategoryDescription, 14, yPos + 4);
+        }
 
-      Object.entries(participantsByCategory).forEach(([categoryKey, categoryParticipants]) => {
-          if (yPos > 250) { // Add new page if content overflows
-            doc.addPage();
-            yPos = 20;
-          }
+        yPos += 15;
 
-          const { ageCategoryName, weightCategoryName, weightCategoryDescription } = getCategoryInfo(categoryParticipants[0].age_category, categoryParticipants[0].weight_category);
+        // Simple bracket logic
+        let currentY = yPos;
+        
+        for (let i = 0; i < poolParticipants.length; i += 2) {
+          const participant1 = poolParticipants[i];
+          const participant2 = poolParticipants[i+1];
+
+          const p1y = currentY;
+          doc.rect(20, p1y - 4, 80, 8);
+          doc.text(`${participant1.district}`, 22, p1y);
+          doc.text(participant1.name, 45, p1y);
           
-          doc.setFontSize(12);
-          doc.setFont('helvetica', 'bold');
-          doc.text(`${ageCategoryName} - ${weightCategoryName}`, 14, yPos);
-          if (weightCategoryDescription) {
-            doc.setFontSize(8);
-            doc.text(weightCategoryDescription, 14, yPos + 4);
+          if(participant2){
+            const p2y = currentY + 10;
+            doc.rect(20, p2y - 4, 80, 8);
+            doc.text(`${participant2.district}`, 22, p2y);
+            doc.text(participant2.name, 45, p2y);
+
+            // Connecting lines
+            const midY = (p1y + p2y) / 2;
+            doc.line(100, p1y, 110, p1y);
+            doc.line(100, p2y, 110, p2y);
+            doc.line(110, p1y, 110, p2y);
+            doc.line(110, midY, 120, midY);
+
+            currentY += 25; // Increase Y for next pair
+          } else {
+            // Handle solo participant (bye)
+              doc.line(100, p1y, 120, p1y);
+              currentY += 15;
           }
-
-          yPos += 15;
-
-          // Simple bracket logic
-          let currentY = yPos;
-          
-          for (let i = 0; i < categoryParticipants.length; i += 2) {
-            const participant1 = categoryParticipants[i];
-            const participant2 = categoryParticipants[i+1];
-
-            const p1y = currentY;
-            doc.rect(20, p1y - 4, 80, 8);
-            doc.text(`${participant1.district}`, 22, p1y);
-            doc.text(participant1.name, 45, p1y);
-            
-            if(participant2){
-              const p2y = currentY + 10;
-              doc.rect(20, p2y - 4, 80, 8);
-              doc.text(`${participant2.district}`, 22, p2y);
-              doc.text(participant2.name, 45, p2y);
-
-              // Connecting lines
-              const midY = (p1y + p2y) / 2;
-              doc.line(100, p1y, 110, p1y);
-              doc.line(100, p2y, 110, p2y);
-              doc.line(110, p1y, 110, p2y);
-              doc.line(110, midY, 120, midY);
-
-              currentY += 25; // Increase Y for next pair
-            } else {
-              // Handle solo participant (bye)
-               doc.line(100, p1y, 120, p1y);
-               currentY += 15;
-            }
-          }
-
-          yPos = currentY + 10;
-      });
-
+        }
     });
 
     doc.save(`${competition.competition_name}_pools.pdf`);
@@ -247,14 +232,13 @@ export default function PoolsManager({ competition, participants, setParticipant
 
   const handleExportExcel = () => {
     const wb = XLSX.utils.book_new();
+    const { ageCategoryName, weightCategoryName } = getCategoryInfo(competition.age_category, competition.weight_category);
+    
     pools.forEach(([poolName, poolParticipants]) => {
         if(poolName === 'unassigned' && poolParticipants.length === 0) return;
         const wsData = [
-            ['Name', 'Age', 'District', 'Age Category', 'Weight Category'],
-            ...poolParticipants.map(p => {
-              const { ageCategoryName, weightCategoryName } = getCategoryInfo(p.age_category, p.weight_category);
-              return [p.name, p.age, p.district, ageCategoryName, weightCategoryName];
-            })
+            ['Name', 'District', 'Age Category', 'Weight Category'],
+            ...poolParticipants.map(p => [p.name, p.district, ageCategoryName, weightCategoryName])
         ];
         const ws = XLSX.utils.aoa_to_sheet(wsData);
         XLSX.utils.book_append_sheet(wb, ws, poolName.replace(/ /g, '_').substring(0, 31));

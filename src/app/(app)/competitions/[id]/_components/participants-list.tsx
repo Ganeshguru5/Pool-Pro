@@ -1,3 +1,4 @@
+
 'use client';
 import { useState } from 'react';
 import { MoreHorizontal, PlusCircle, Trash2, Edit, UserX } from 'lucide-react';
@@ -70,7 +71,6 @@ export default function ParticipantsList({ competition, participants, setPartici
               <TableHeader>
                 <TableRow>
                   <TableHead>Name</TableHead>
-                  <TableHead>Age</TableHead>
                   <TableHead>District</TableHead>
                   <TableHead>Pool</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
@@ -80,7 +80,6 @@ export default function ParticipantsList({ competition, participants, setPartici
                 {participants.map(p => (
                   <TableRow key={p.id}>
                     <TableCell className="font-medium">{p.name}</TableCell>
-                    <TableCell>{p.age}</TableCell>
                     <TableCell>{p.district}</TableCell>
                     <TableCell>
                       {p.pool_assignment ? (
