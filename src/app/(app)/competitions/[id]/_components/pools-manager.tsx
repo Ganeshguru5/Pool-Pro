@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { Bot, Shuffle, Users, Loader2 } from 'lucide-react';
+import { Shuffle, Users, Bot, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import {
@@ -13,9 +13,9 @@ import {
 } from '@/components/ui/select';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
-import { generateBalancedPools } from '@/ai/flows/intelligent-pool-generation';
 import type { Competition, Participant } from '@/lib/types';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
 
 interface PoolsManagerProps {
   competition: Competition;
@@ -26,8 +26,7 @@ interface PoolsManagerProps {
 export default function PoolsManager({ competition, participants, setParticipants }: PoolsManagerProps) {
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
-  const [competitionRules, setCompetitionRules] = useState('');
-
+  
   const pools = useMemo(() => {
     const grouped: { [key: string]: Participant[] } = {};
     participants.forEach(p => {
@@ -40,35 +39,69 @@ export default function PoolsManager({ competition, participants, setParticipant
     return Object.entries(grouped).sort(([keyA], [keyB]) => keyA.localeCompare(keyB));
   }, [participants]);
 
-  const handleGeneratePools = async () => {
+  const handleGeneratePools = () => {
     if (participants.length === 0) {
       toast({ variant: 'destructive', title: 'Error', description: 'No participants to assign to pools.' });
       return;
     }
 
     setIsLoading(true);
+
     try {
-      const result = await generateBalancedPools({
-        participants: participants.map(({ ...p }) => ({
-          ...p,
-          participants_count: 0, // Not needed for AI model
-          pool_assignment: p.pool_assignment || null,
-        })),
-        competition_rules: competitionRules,
+      // Group participants by district
+      const participantsByDistrict: { [district: string]: Participant[] } = {};
+      participants.forEach(p => {
+        if (!participantsByDistrict[p.district]) {
+          participantsByDistrict[p.district] = [];
+        }
+        participantsByDistrict[p.district].push(p);
       });
 
-      const updatedParticipants = [...participants];
-      result.pools.forEach((pool, index) => {
-        const poolName = `Pool ${index + 1}`;
-        pool.forEach(participantId => {
-          const participantIndex = updatedParticipants.findIndex(p => p.id === participantId);
-          if (participantIndex !== -1) {
-            updatedParticipants[participantIndex].pool_assignment = poolName;
-          }
+      // Determine number of pools needed (max participants from one district)
+      const numPools = Math.max(...Object.values(participantsByDistrict).map(arr => arr.length), 0, 2);
+
+      // Create pools and assign participants
+      const newPools: { [key: string]: string[] } = {};
+      for (let i = 1; i <= numPools; i++) {
+        newPools[`Pool ${i}`] = [];
+      }
+      
+      let poolIndex = 0;
+      // Distribute participants in a round-robin fashion, district by district
+      Object.values(participantsByDistrict).forEach(districtParticipants => {
+        districtParticipants.forEach(participant => {
+            let assigned = false;
+            let initialPoolIndex = poolIndex;
+            while(!assigned) {
+                const poolName = `Pool ${poolIndex + 1}`;
+                if (!newPools[poolName].some(pId => participants.find(p => p.id === pId)?.district === participant.district)) {
+                    newPools[poolName].push(participant.id);
+                    assigned = true;
+                }
+                poolIndex = (poolIndex + 1) % numPools;
+                if(poolIndex === initialPoolIndex && !assigned){
+                    // This should not happen with the logic of numPools, but as a safe guard
+                    console.error("Could not assign participant", participant);
+                    break;
+                }
+            }
         });
       });
+
+      const updatedParticipants = participants.map(p => ({...p, pool_assignment: null}));
+
+      Object.entries(newPools).forEach(([poolName, participantIds]) => {
+          participantIds.forEach(participantId => {
+              const participantIndex = updatedParticipants.findIndex(p => p.id === participantId);
+              if (participantIndex !== -1) {
+                  updatedParticipants[participantIndex].pool_assignment = poolName;
+              }
+          });
+      });
+
       setParticipants(updatedParticipants);
       toast({ title: 'Success', description: 'Pools have been generated.' });
+
     } catch (error) {
       console.error(error);
       toast({ variant: 'destructive', title: 'Error', description: 'Failed to generate pools.' });
@@ -94,8 +127,8 @@ export default function PoolsManager({ competition, participants, setParticipant
                 <CardDescription>Generate pools automatically or assign participants manually.</CardDescription>
             </div>
             <Button onClick={handleGeneratePools} disabled={isLoading}>
-                {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Bot className="mr-2 h-4 w-4" />}
-                Generate with AI
+                {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Shuffle className="mr-2 h-4 w-4" />}
+                Generate Pools
             </Button>
         </div>
       </CardHeader>
@@ -111,7 +144,7 @@ export default function PoolsManager({ competition, participants, setParticipant
             <Shuffle className="h-4 w-4" />
             <AlertTitle>No Pools Generated</AlertTitle>
             <AlertDescription>
-              Click 'Generate with AI' to automatically create balanced pools for your participants.
+              Click 'Generate Pools' to automatically create balanced pools for your participants.
             </AlertDescription>
           </Alert>
         ) : (
