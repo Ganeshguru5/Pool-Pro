@@ -1,3 +1,4 @@
+
 import { AgeCategory } from "./types";
 
 export const AGE_CATEGORIES: AgeCategory[] = [
@@ -132,3 +133,5 @@ export function getCategoryInfo(ageCategoryId: string, weightCategoryId: string)
         weightCategoryDescription: weightCategory?.description,
     }
 }
+
+    
