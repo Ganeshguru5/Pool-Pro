@@ -152,7 +152,12 @@ export default function PoolsManager({ competition, participants, setParticipant
 
     pools.forEach(([poolName, poolParticipants], poolIndex) => {
       if (poolName === 'unassigned' && poolParticipants.length === 0) return;
-      if (poolIndex > 0) doc.addPage();
+      
+      const isFirstPageOfDoc = poolIndex === 0 || (poolIndex > 0 && pools[0][0] === 'unassigned' && pools[0][1].length === 0 && poolIndex === 1);
+
+      if (!isFirstPageOfDoc) {
+        doc.addPage();
+      }
 
       doc.setFontSize(16);
       doc.setFont('helvetica', 'bold');
@@ -160,10 +165,14 @@ export default function PoolsManager({ competition, participants, setParticipant
       
       doc.setFontSize(10);
       doc.setFont('helvetica', 'normal');
-      doc.text(`From: ${format(new Date(competition.competition_date), 'dd/MM/yyyy')} To: ${format(new Date(competition.competition_date), 'dd/MM/yyyy')}`, pageWidth / 2, 26, { align: 'center' });
+      doc.text(`Date: ${format(new Date(competition.competition_date), 'dd/MM/yyyy')}`, pageWidth / 2, 26, { align: 'center' });
       if (competition.address) {
         doc.text(competition.address, pageWidth / 2, 32, { align: 'center' });
       }
+
+      doc.setFontSize(14);
+      doc.setFont('helvetica', 'bold');
+      doc.text(poolName, pageWidth / 2, 42, { align: 'center' });
 
       // Group participants by age/weight category for this pool
       const participantsByCategory: { [key: string]: Participant[] } = {};
@@ -175,7 +184,7 @@ export default function PoolsManager({ competition, participants, setParticipant
         participantsByCategory[key].push(p);
       });
       
-      let yPos = 40;
+      let yPos = 55;
 
       Object.entries(participantsByCategory).forEach(([categoryKey, categoryParticipants]) => {
           if (yPos > 250) { // Add new page if content overflows
@@ -187,28 +196,46 @@ export default function PoolsManager({ competition, participants, setParticipant
           
           doc.setFontSize(12);
           doc.setFont('helvetica', 'bold');
-          doc.text(`${ageCategoryName} - ${weightCategoryName}`, pageWidth/2, yPos, {align: 'center'});
-          doc.setFontSize(10);
-          doc.text(weightCategoryDescription || '', pageWidth/2, yPos + 5, {align: 'center'});
+          doc.text(`${ageCategoryName} - ${weightCategoryName}`, 14, yPos);
+          if (weightCategoryDescription) {
+            doc.setFontSize(8);
+            doc.text(weightCategoryDescription, 14, yPos + 4);
+          }
 
           yPos += 15;
 
           // Simple bracket logic
-          const bracketHeight = 10 * categoryParticipants.length;
           let currentY = yPos;
           
-          categoryParticipants.forEach((p, index) => {
-            doc.rect(20, currentY - 4, 80, 8); // Player box
-            doc.text(`${p.district}`, 22, currentY);
-            doc.text(p.name, 45, currentY);
+          for (let i = 0; i < categoryParticipants.length; i += 2) {
+            const participant1 = categoryParticipants[i];
+            const participant2 = categoryParticipants[i+1];
+
+            const p1y = currentY;
+            doc.rect(20, p1y - 4, 80, 8);
+            doc.text(`${participant1.district}`, 22, p1y);
+            doc.text(participant1.name, 45, p1y);
             
-            if (index % 2 === 0 && index < categoryParticipants.length - 1) {
-              doc.line(100, currentY, 110, currentY + 4);
-              doc.line(100, currentY + 10, 110, currentY + 4);
-              doc.line(110, currentY + 4, 120, currentY + 4);
+            if(participant2){
+              const p2y = currentY + 10;
+              doc.rect(20, p2y - 4, 80, 8);
+              doc.text(`${participant2.district}`, 22, p2y);
+              doc.text(participant2.name, 45, p2y);
+
+              // Connecting lines
+              const midY = (p1y + p2y) / 2;
+              doc.line(100, p1y, 110, p1y);
+              doc.line(100, p2y, 110, p2y);
+              doc.line(110, p1y, 110, p2y);
+              doc.line(110, midY, 120, midY);
+
+              currentY += 25; // Increase Y for next pair
+            } else {
+              // Handle solo participant (bye)
+               doc.line(100, p1y, 120, p1y);
+               currentY += 15;
             }
-            currentY += 10;
-          });
+          }
 
           yPos = currentY + 10;
       });
