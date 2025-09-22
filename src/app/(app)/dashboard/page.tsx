@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { CompetitionForm } from '@/components/competition-form';
 import useLocalStorageState from '@/hooks/use-local-storage-state';
-import type { Competition } from '@/lib/types';
+import type { Competition, Participant } from '@/lib/types';
 import { format } from 'date-fns';
 import {
   DropdownMenu,
@@ -79,7 +79,7 @@ export default function DashboardPage() {
                 <div className="flex justify-between items-start">
                   <div>
                     <CardTitle className="font-headline text-xl">{comp.competition_name}</CardTitle>
-                    <CardDescription>{comp.competition_type}</CardDescription>
+                    {comp.address && <CardDescription>{comp.address}</CardDescription>}
                   </div>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>

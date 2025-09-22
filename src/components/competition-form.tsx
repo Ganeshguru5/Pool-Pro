@@ -36,15 +36,14 @@ import { CalendarIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import useLocalStorageState from '@/hooks/use-local-storage-state';
-import { Competition, CompetitionStatus, CompetitionStatusType } from '@/lib/types';
+import { Competition, CompetitionStatus } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 
 const formSchema = z.object({
   competition_name: z.string().min(3, { message: 'Competition name must be at least 3 characters.' }),
-  competition_type: z.string().min(1, { message: 'Competition type is required.' }),
+  address: z.string().optional(),
   competition_date: z.date({ required_error: 'Competition date is required.' }),
   registration_deadline: z.date({ required_error: 'Registration deadline is required.' }),
-  venue: z.string().optional(),
   description: z.string().optional(),
   max_participants: z.coerce.number().int().positive().optional(),
   min_age: z.coerce.number().int().positive().optional(),
@@ -68,8 +67,7 @@ export function CompetitionForm({ isOpen, setIsOpen, competition }: CompetitionF
     resolver: zodResolver(formSchema),
     defaultValues: {
       competition_name: '',
-      competition_type: '',
-      venue: '',
+      address: '',
       description: '',
       status: 'draft',
     },
@@ -85,8 +83,7 @@ export function CompetitionForm({ isOpen, setIsOpen, competition }: CompetitionF
     } else {
       form.reset({
         competition_name: '',
-        competition_type: '',
-        venue: '',
+        address: '',
         description: '',
         status: 'draft',
         competition_date: undefined,
@@ -99,7 +96,7 @@ export function CompetitionForm({ isOpen, setIsOpen, competition }: CompetitionF
   }, [competition, form, isOpen]);
 
   const onSubmit = (data: CompetitionFormValues) => {
-    const newCompetition: Competition = {
+    const newCompetition: Competition & { competition_type?: string } = {
       id: competition ? competition.id : crypto.randomUUID(),
       ...data,
       competition_date: data.competition_date.toISOString(),
@@ -107,14 +104,16 @@ export function CompetitionForm({ isOpen, setIsOpen, competition }: CompetitionF
       created_at: competition ? competition.created_at : new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
+    
+    delete newCompetition.competition_type;
 
     if (competition) {
       setCompetitions(prev =>
-        prev.map(c => (c.id === competition.id ? newCompetition : c))
+        prev.map(c => (c.id === competition.id ? newCompetition as Competition : c))
       );
       toast({ title: 'Success', description: 'Competition updated successfully.' });
     } else {
-      setCompetitions(prev => [...prev, newCompetition]);
+      setCompetitions(prev => [...prev, newCompetition as Competition]);
       toast({ title: 'Success', description: 'Competition created successfully.' });
     }
 
@@ -134,34 +133,33 @@ export function CompetitionForm({ isOpen, setIsOpen, competition }: CompetitionF
         </DialogHeader>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 max-h-[70vh] overflow-y-auto p-1 pr-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <FormField
-                control={form.control}
-                name="competition_name"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Competition Name</FormLabel>
-                    <FormControl>
-                      <Input placeholder="e.g., Annual Dance Off" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="competition_type"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Competition Type</FormLabel>
-                    <FormControl>
-                      <Input placeholder="e.g., Singing, Dancing, Sports" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
+            <FormField
+              control={form.control}
+              name="competition_name"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Competition Name</FormLabel>
+                  <FormControl>
+                    <Input placeholder="e.g., Annual Dance Off" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            
+            <FormField
+              control={form.control}
+              name="address"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Address (Optional)</FormLabel>
+                  <FormControl>
+                    <Input placeholder="e.g., 123 Main St, Anytown" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <FormField
@@ -244,20 +242,6 @@ export function CompetitionForm({ isOpen, setIsOpen, competition }: CompetitionF
               />
             </div>
             
-            <FormField
-              control={form.control}
-              name="venue"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Venue (Optional)</FormLabel>
-                  <FormControl>
-                    <Input placeholder="e.g., City Convention Center" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
             <FormField
               control={form.control}
               name="description"

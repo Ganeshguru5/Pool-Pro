@@ -4,10 +4,9 @@ export type CompetitionStatusType = (typeof CompetitionStatus)[number];
 export type Competition = {
   id: string;
   competition_name: string;
-  competition_type: string;
   competition_date: string;
   registration_deadline: string;
-  venue?: string;
+  address?: string;
   description?: string;
   max_participants?: number;
   min_age?: number;
