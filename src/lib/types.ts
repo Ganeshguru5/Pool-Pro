@@ -1,6 +1,18 @@
 export const CompetitionStatus = ["draft", "active", "registration_closed", "completed"] as const;
 export type CompetitionStatusType = (typeof CompetitionStatus)[number];
 
+export type AgeCategory = {
+    id: string;
+    name: string;
+    description: string;
+};
+
+export type WeightCategory = {
+    id: string;
+    name: string;
+    description: string;
+};
+
 export type Competition = {
   id: string;
   competition_name: string;
@@ -8,9 +20,7 @@ export type Competition = {
   registration_deadline: string;
   address?: string;
   description?: string;
-  max_participants?: number;
-  min_age?: number;
-  max_age?: number;
+  age_categories: string[]; // Stores array of age category IDs
   status: CompetitionStatusType;
   created_at: string;
   updated_at: string;
@@ -22,10 +32,8 @@ export type Participant = {
   name: string;
   age: number;
   district: string;
-  phone_number?: string;
-  email?: string;
-  emergency_contact?: string;
-  special_requirements?: string;
+  age_category: string; // Stores age category ID
+  weight_category: string; // Stores weight category ID
   registration_date: string;
   pool_assignment: string | null;
 };

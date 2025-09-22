@@ -32,12 +32,15 @@ import {
 } from '@/components/ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
-import { CalendarIcon } from 'lucide-react';
+import { CalendarIcon, Check, ChevronsUpDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import useLocalStorageState from '@/hooks/use-local-storage-state';
 import { Competition, CompetitionStatus } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
+import { AGE_CATEGORIES } from '@/lib/categories';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem } from '@/components/ui/command';
+import { Badge } from '@/components/ui/badge';
 
 const formSchema = z.object({
   competition_name: z.string().min(3, { message: 'Competition name must be at least 3 characters.' }),
@@ -45,9 +48,7 @@ const formSchema = z.object({
   competition_date: z.date({ required_error: 'Competition date is required.' }),
   registration_deadline: z.date({ required_error: 'Registration deadline is required.' }),
   description: z.string().optional(),
-  max_participants: z.coerce.number().int().positive().optional(),
-  min_age: z.coerce.number().int().positive().optional(),
-  max_age: z.coerce.number().int().positive().optional(),
+  age_categories: z.array(z.string()).min(1, { message: 'At least one age category must be selected.' }),
   status: z.enum(CompetitionStatus),
 });
 
@@ -69,6 +70,7 @@ export function CompetitionForm({ isOpen, setIsOpen, competition }: CompetitionF
       competition_name: '',
       address: '',
       description: '',
+      age_categories: [],
       status: 'draft',
     },
   });
@@ -88,15 +90,13 @@ export function CompetitionForm({ isOpen, setIsOpen, competition }: CompetitionF
         status: 'draft',
         competition_date: undefined,
         registration_deadline: undefined,
-        max_participants: undefined,
-        min_age: undefined,
-        max_age: undefined,
+        age_categories: [],
       });
     }
   }, [competition, form, isOpen]);
 
   const onSubmit = (data: CompetitionFormValues) => {
-    const newCompetition: Competition & { competition_type?: string } = {
+    const newCompetition: Competition = {
       id: competition ? competition.id : crypto.randomUUID(),
       ...data,
       competition_date: data.competition_date.toISOString(),
@@ -104,16 +104,14 @@ export function CompetitionForm({ isOpen, setIsOpen, competition }: CompetitionF
       created_at: competition ? competition.created_at : new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
-    
-    delete newCompetition.competition_type;
 
     if (competition) {
       setCompetitions(prev =>
-        prev.map(c => (c.id === competition.id ? newCompetition as Competition : c))
+        prev.map(c => (c.id === competition.id ? newCompetition : c))
       );
       toast({ title: 'Success', description: 'Competition updated successfully.' });
     } else {
-      setCompetitions(prev => [...prev, newCompetition as Competition]);
+      setCompetitions(prev => [...prev, newCompetition]);
       toast({ title: 'Success', description: 'Competition created successfully.' });
     }
 
@@ -140,7 +138,7 @@ export function CompetitionForm({ isOpen, setIsOpen, competition }: CompetitionF
                 <FormItem>
                   <FormLabel>Competition Name</FormLabel>
                   <FormControl>
-                    <Input placeholder="e.g., Annual Dance Off" {...field} />
+                    <Input placeholder="e.g., Annual Taekwondo Championship" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -241,6 +239,75 @@ export function CompetitionForm({ isOpen, setIsOpen, competition }: CompetitionF
                 )}
               />
             </div>
+
+            <FormField
+              control={form.control}
+              name="age_categories"
+              render={({ field }) => (
+                <FormItem className="flex flex-col">
+                  <FormLabel>Age Categories</FormLabel>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <FormControl>
+                        <Button
+                          variant="outline"
+                          role="combobox"
+                          className={cn(
+                            "w-full justify-between",
+                            !field.value?.length && "text-muted-foreground"
+                          )}
+                        >
+                          <div className="flex gap-1 flex-wrap">
+                            {field.value?.length > 0 ? (
+                                field.value.map(val => AGE_CATEGORIES.find(ac => ac.id === val)?.name).map(name => (
+                                    <Badge key={name} variant="secondary">{name}</Badge>
+                                ))
+                            ) : (
+                                "Select age categories"
+                            )}
+                          </div>
+                          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                        </Button>
+                      </FormControl>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-full p-0">
+                      <Command>
+                        <CommandInput placeholder="Search categories..." />
+                        <CommandEmpty>No category found.</CommandEmpty>
+                        <CommandGroup className="max-h-64 overflow-y-auto">
+                          {AGE_CATEGORIES.map((category) => (
+                            <CommandItem
+                              key={category.id}
+                              onSelect={() => {
+                                const currentValues = field.value || [];
+                                const newValue = currentValues.includes(category.id)
+                                    ? currentValues.filter(v => v !== category.id)
+                                    : [...currentValues, category.id]
+                                field.onChange(newValue);
+                              }}
+                            >
+                                <Check
+                                    className={cn(
+                                    "mr-2 h-4 w-4",
+                                    field.value?.includes(category.id)
+                                        ? "opacity-100"
+                                        : "opacity-0"
+                                    )}
+                                />
+                                <div>
+                                    <p>{category.name}</p>
+                                    <p className="text-xs text-muted-foreground">{category.description}</p>
+                                </div>
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
             
             <FormField
               control={form.control}
@@ -255,48 +322,6 @@ export function CompetitionForm({ isOpen, setIsOpen, competition }: CompetitionF
                 </FormItem>
               )}
             />
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <FormField
-                control={form.control}
-                name="min_age"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Min Age</FormLabel>
-                    <FormControl>
-                      <Input type="number" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="max_age"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Max Age</FormLabel>
-                    <FormControl>
-                      <Input type="number" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="max_participants"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Max Participants</FormLabel>
-                    <FormControl>
-                      <Input type="number" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
 
             <FormField
               control={form.control}

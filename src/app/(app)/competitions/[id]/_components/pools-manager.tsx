@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { Shuffle, Users, Bot, Loader2, Download } from 'lucide-react';
+import { Shuffle, Users, Download, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import {
@@ -22,8 +22,11 @@ import { useToast } from '@/hooks/use-toast';
 import type { Competition, Participant } from '@/lib/types';
 import { Badge } from '@/components/ui/badge';
 import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
+import 'jspdf-autotable';
 import * as XLSX from 'xlsx';
+import { format } from 'date-fns';
+import { getCategoryInfo } from '@/lib/categories';
+
 
 interface PoolsManagerProps {
   competition: Competition;
@@ -145,30 +148,71 @@ export default function PoolsManager({ competition, participants, setParticipant
   
   const handleExportPDF = () => {
     const doc = new jsPDF();
-    doc.text(`${competition.competition_name} - Pools`, 14, 16);
-    
-    let y = 25;
-    pools.forEach(([poolName, poolParticipants]) => {
-        if (poolName === 'unassigned' && poolParticipants.length === 0) return;
+    const pageWidth = doc.internal.pageSize.getWidth();
 
-        const head = [['Name', 'Age', 'District']];
-        const body = poolParticipants.map(p => [p.name, p.age, p.district]);
-        
-        autoTable(doc, {
-            head: [[{content: poolName, styles: {fillColor: [22, 163, 74]}}]],
-            startY: y,
-            theme: 'plain'
-        });
+    pools.forEach(([poolName, poolParticipants], poolIndex) => {
+      if (poolName === 'unassigned' && poolParticipants.length === 0) return;
+      if (poolIndex > 0) doc.addPage();
 
-        autoTable(doc, {
-            head: head,
-            body: body,
-            startY: (doc as any).lastAutoTable.finalY,
-            theme: 'striped',
-            headStyles: { fillColor: [41, 128, 185] }
-        });
+      doc.setFontSize(16);
+      doc.setFont('helvetica', 'bold');
+      doc.text(competition.competition_name, pageWidth / 2, 20, { align: 'center' });
+      
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'normal');
+      doc.text(`From: ${format(new Date(competition.competition_date), 'dd/MM/yyyy')} To: ${format(new Date(competition.competition_date), 'dd/MM/yyyy')}`, pageWidth / 2, 26, { align: 'center' });
+      if (competition.address) {
+        doc.text(competition.address, pageWidth / 2, 32, { align: 'center' });
+      }
 
-        y = (doc as any).lastAutoTable.finalY + 10;
+      // Group participants by age/weight category for this pool
+      const participantsByCategory: { [key: string]: Participant[] } = {};
+      poolParticipants.forEach(p => {
+        const key = `${p.age_category}-${p.weight_category}`;
+        if (!participantsByCategory[key]) {
+          participantsByCategory[key] = [];
+        }
+        participantsByCategory[key].push(p);
+      });
+      
+      let yPos = 40;
+
+      Object.entries(participantsByCategory).forEach(([categoryKey, categoryParticipants]) => {
+          if (yPos > 250) { // Add new page if content overflows
+            doc.addPage();
+            yPos = 20;
+          }
+
+          const { ageCategoryName, weightCategoryName, weightCategoryDescription } = getCategoryInfo(categoryParticipants[0].age_category, categoryParticipants[0].weight_category);
+          
+          doc.setFontSize(12);
+          doc.setFont('helvetica', 'bold');
+          doc.text(`${ageCategoryName} - ${weightCategoryName}`, pageWidth/2, yPos, {align: 'center'});
+          doc.setFontSize(10);
+          doc.text(weightCategoryDescription || '', pageWidth/2, yPos + 5, {align: 'center'});
+
+          yPos += 15;
+
+          // Simple bracket logic
+          const bracketHeight = 10 * categoryParticipants.length;
+          let currentY = yPos;
+          
+          categoryParticipants.forEach((p, index) => {
+            doc.rect(20, currentY - 4, 80, 8); // Player box
+            doc.text(`${p.district}`, 22, currentY);
+            doc.text(p.name, 45, currentY);
+            
+            if (index % 2 === 0 && index < categoryParticipants.length - 1) {
+              doc.line(100, currentY, 110, currentY + 4);
+              doc.line(100, currentY + 10, 110, currentY + 4);
+              doc.line(110, currentY + 4, 120, currentY + 4);
+            }
+            currentY += 10;
+          });
+
+          yPos = currentY + 10;
+      });
+
     });
 
     doc.save(`${competition.competition_name}_pools.pdf`);
@@ -179,11 +223,14 @@ export default function PoolsManager({ competition, participants, setParticipant
     pools.forEach(([poolName, poolParticipants]) => {
         if(poolName === 'unassigned' && poolParticipants.length === 0) return;
         const wsData = [
-            ['Name', 'Age', 'District'],
-            ...poolParticipants.map(p => [p.name, p.age, p.district])
+            ['Name', 'Age', 'District', 'Age Category', 'Weight Category'],
+            ...poolParticipants.map(p => {
+              const { ageCategoryName, weightCategoryName } = getCategoryInfo(p.age_category, p.weight_category);
+              return [p.name, p.age, p.district, ageCategoryName, weightCategoryName];
+            })
         ];
         const ws = XLSX.utils.aoa_to_sheet(wsData);
-        XLSX.utils.book_append_sheet(wb, ws, poolName);
+        XLSX.utils.book_append_sheet(wb, ws, poolName.replace(/ /g, '_').substring(0, 31));
     });
     XLSX.writeFile(wb, `${competition.competition_name}_pools.xlsx`);
   };

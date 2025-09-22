@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -16,6 +16,7 @@ import {
 import {
   Form,
   FormControl,
+  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -29,19 +30,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Textarea } from '@/components/ui/textarea';
 import type { Competition, Participant } from '@/lib/types';
 import { TAMIL_NADU_DISTRICTS } from '@/lib/constants';
 import { useToast } from '@/hooks/use-toast';
+import { AGE_CATEGORIES, getWeightCategoriesForAgeCategory } from '@/lib/categories';
 
 const formSchema = z.object({
   name: z.string().min(2, { message: 'Name must be at least 2 characters.' }),
   age: z.coerce.number().int().positive({ message: 'Please enter a valid age.' }),
   district: z.string().min(1, { message: 'District is required.' }),
-  phone_number: z.string().optional(),
-  email: z.string().email({ message: 'Please enter a valid email.' }).optional().or(z.literal('')),
-  emergency_contact: z.string().optional(),
-  special_requirements: z.string().optional(),
+  age_category: z.string().min(1, { message: 'Age category is required.' }),
+  weight_category: z.string().min(1, { message: 'Weight category is required.' }),
 });
 
 type ParticipantFormValues = z.infer<typeof formSchema>;
@@ -62,12 +61,18 @@ export function ParticipantForm({ isOpen, setIsOpen, participant, competition, s
     defaultValues: {
         name: '',
         district: '',
-        phone_number: '',
-        email: '',
-        emergency_contact: '',
-        special_requirements: ''
     },
   });
+
+  const selectedAgeCategoryId = form.watch('age_category');
+  const availableAgeCategories = useMemo(() => {
+    return AGE_CATEGORIES.filter(ac => competition.age_categories.includes(ac.id));
+  }, [competition.age_categories]);
+
+  const weightCategories = useMemo(() => {
+    return getWeightCategoriesForAgeCategory(selectedAgeCategoryId);
+  }, [selectedAgeCategoryId]);
+
 
   useEffect(() => {
     if (participant) {
@@ -77,13 +82,18 @@ export function ParticipantForm({ isOpen, setIsOpen, participant, competition, s
         name: '',
         age: undefined,
         district: '',
-        phone_number: '',
-        email: '',
-        emergency_contact: '',
-        special_requirements: ''
+        age_category: '',
+        weight_category: '',
       });
     }
   }, [participant, form, isOpen]);
+
+  // Reset weight category when age category changes
+  useEffect(() => {
+    if (isOpen) {
+        form.resetField('weight_category');
+    }
+  }, [selectedAgeCategoryId, isOpen, form]);
 
   const onSubmit = (data: ParticipantFormValues) => {
     const newParticipant: Participant = {
@@ -173,62 +183,68 @@ export function ParticipantForm({ isOpen, setIsOpen, participant, competition, s
                 </FormItem>
               )}
             />
-             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <FormField
-                control={form.control}
-                name="phone_number"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Phone (Optional)</FormLabel>
-                    <FormControl>
-                      <Input type="tel" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="email"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Email (Optional)</FormLabel>
-                    <FormControl>
-                      <Input type="email" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
-
+            
             <FormField
               control={form.control}
-              name="emergency_contact"
+              name="age_category"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Emergency Contact (Optional)</FormLabel>
-                  <FormControl>
-                    <Input {...field} />
-                  </FormControl>
+                  <FormLabel>Age Category</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value} defaultValue="">
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select an age category" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {availableAgeCategories.map(category => (
+                        <SelectItem key={category.id} value={category.id}>
+                          {category.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {selectedAgeCategoryId && (
+                    <FormDescription>
+                        {AGE_CATEGORIES.find(ac => ac.id === selectedAgeCategoryId)?.description}
+                    </FormDescription>
+                  )}
                   <FormMessage />
                 </FormItem>
               )}
             />
-
-            <FormField
-              control={form.control}
-              name="special_requirements"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Special Requirements (Optional)</FormLabel>
-                  <FormControl>
-                    <Textarea placeholder="Any allergies, accessibility needs, etc." {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+            
+            {selectedAgeCategoryId && (
+              <FormField
+                control={form.control}
+                name="weight_category"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Weight Category</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value} defaultValue="" disabled={!selectedAgeCategoryId || weightCategories.length === 0}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select a weight category" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {weightCategories.map(category => (
+                          <SelectItem key={category.id} value={category.id}>
+                            {category.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {field.value && (
+                        <FormDescription>
+                            {weightCategories.find(wc => wc.id === field.value)?.description}
+                        </FormDescription>
+                    )}
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
 
             <DialogFooter className="pt-4">
               <Button type="button" variant="outline" onClick={() => setIsOpen(false)}>Cancel</Button>
