@@ -66,8 +66,9 @@ export function ParticipantForm({ isOpen, setIsOpen, participant, competition, s
 
   const selectedAgeCategoryId = form.watch('age_category');
   const availableAgeCategories = useMemo(() => {
+    if (!competition?.age_categories) return [];
     return AGE_CATEGORIES.filter(ac => competition.age_categories.includes(ac.id));
-  }, [competition.age_categories]);
+  }, [competition?.age_categories]);
 
   const weightCategories = useMemo(() => {
     return getWeightCategoriesForAgeCategory(selectedAgeCategoryId);
