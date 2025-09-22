@@ -111,6 +111,23 @@ export default function PoolsManager({ competition, participants, setParticipant
   };
 
   const handleManualAssignment = (participantId: string, newPool: string) => {
+    const participantToMove = participants.find(p => p.id === participantId);
+    if (!participantToMove) return;
+
+    if (newPool !== 'unassigned') {
+        const targetPoolParticipants = participants.filter(p => p.pool_assignment === newPool);
+        const districtExistsInPool = targetPoolParticipants.some(p => p.district === participantToMove.district);
+
+        if (districtExistsInPool) {
+            toast({
+                variant: 'destructive',
+                title: 'Assignment Failed',
+                description: `Pool "${newPool}" already has a participant from ${participantToMove.district}.`,
+            });
+            return;
+        }
+    }
+    
     setParticipants(prev =>
       prev.map(p => (p.id === participantId ? { ...p, pool_assignment: newPool === 'unassigned' ? null : newPool } : p))
     );
