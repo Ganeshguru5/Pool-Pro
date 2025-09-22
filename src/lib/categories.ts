@@ -105,7 +105,7 @@ export const WEIGHT_CATEGORIES = {
     senior_girls: [
         { id: "sg_u46", name: "Under 46", description: "Weight: Up to 46kg" },
         { id: "sg_u49", name: "Under 49", description: "Weight: 46kg to 49kg" },
-        { id_ "sg_u53", name: "Under 53", description: "Weight: 49kg to 53kg" },
+        { id: "sg_u53", name: "Under 53", description: "Weight: 49kg to 53kg" },
         { id: "sg_u57", name: "Under 57", description: "Weight: 53kg to 57kg" },
         { id: "sg_u62", name: "Under 62", description: "Weight: 57kg to 62kg" },
         { id: "sg_u67", name: "Under 67", description: "Weight: 62kg to 67kg" },
