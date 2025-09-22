@@ -168,16 +168,16 @@ export default function PoolsManager({ competition, participants, setParticipant
       doc.setFontSize(10);
       doc.setFont('helvetica', 'normal');
       doc.text(`Date: ${format(new Date(competition.competition_date), 'dd/MM/yyyy')}`, pageWidth / 2, 26, { align: 'center' });
-      if (competition.address) {
-        doc.text(competition.address, pageWidth / 2, 32, { align: 'center' });
-      }
+      doc.text(`Organized by: ${competition.organized_by}`, pageWidth / 2, 32, { align: 'center' });
+      doc.text(competition.address, pageWidth / 2, 38, { align: 'center' });
+
 
       doc.setFontSize(14);
       doc.setFont('helvetica', 'bold');
-      doc.text(poolName, pageWidth / 2, 42, { align: 'center' });
+      doc.text(poolName, pageWidth / 2, 48, { align: 'center' });
 
       
-      let yPos = 55;
+      let yPos = 60;
         if (yPos > 250) { // Add new page if content overflows
           doc.addPage();
           yPos = 20;

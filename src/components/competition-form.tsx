@@ -24,7 +24,6 @@ import {
   FormMessage,
 } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
   SelectContent,
@@ -44,10 +43,9 @@ import { AGE_CATEGORIES, getWeightCategoriesForAgeCategory } from '@/lib/categor
 
 const formSchema = z.object({
   competition_name: z.string().min(3, { message: 'Competition name must be at least 3 characters.' }),
-  address: z.string().optional(),
+  address: z.string().min(1, { message: 'Address is required.' }),
+  organized_by: z.string().min(1, { message: 'Organizer is required.' }),
   competition_date: z.date({ required_error: 'Competition date is required.' }),
-  registration_deadline: z.date({ required_error: 'Registration deadline is required.' }),
-  description: z.string().optional(),
   age_category: z.string().min(1, { message: 'Age category is required.' }),
   weight_category: z.string().min(1, { message: 'Weight category is required.' }),
   status: z.enum(CompetitionStatus),
@@ -70,7 +68,7 @@ export function CompetitionForm({ isOpen, setIsOpen, competition }: CompetitionF
     defaultValues: {
       competition_name: '',
       address: '',
-      description: '',
+      organized_by: '',
       age_category: '',
       weight_category: '',
       status: 'draft',
@@ -87,16 +85,14 @@ export function CompetitionForm({ isOpen, setIsOpen, competition }: CompetitionF
       form.reset({
         ...competition,
         competition_date: new Date(competition.competition_date),
-        registration_deadline: new Date(competition.registration_deadline),
       });
     } else {
       form.reset({
         competition_name: '',
         address: '',
-        description: '',
+        organized_by: '',
         status: 'draft',
         competition_date: undefined,
-        registration_deadline: undefined,
         age_category: '',
         weight_category: '',
       });
@@ -115,7 +111,6 @@ export function CompetitionForm({ isOpen, setIsOpen, competition }: CompetitionF
       id: competition ? competition.id : crypto.randomUUID(),
       ...data,
       competition_date: data.competition_date.toISOString(),
-      registration_deadline: data.registration_deadline.toISOString(),
       created_at: competition ? competition.created_at : new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
@@ -165,7 +160,7 @@ export function CompetitionForm({ isOpen, setIsOpen, competition }: CompetitionF
               name="address"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Address (Optional)</FormLabel>
+                  <FormLabel>Address</FormLabel>
                   <FormControl>
                     <Input placeholder="e.g., 123 Main St, Anytown" {...field} />
                   </FormControl>
@@ -174,86 +169,59 @@ export function CompetitionForm({ isOpen, setIsOpen, competition }: CompetitionF
               )}
             />
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <FormField
-                control={form.control}
-                name="competition_date"
-                render={({ field }) => (
-                  <FormItem className="flex flex-col">
-                    <FormLabel>Competition Date</FormLabel>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <FormControl>
-                          <Button
-                            variant={'outline'}
-                            className={cn(
-                              'w-full pl-3 text-left font-normal',
-                              !field.value && 'text-muted-foreground'
-                            )}
-                          >
-                            {field.value ? (
-                              format(field.value, 'PPP')
-                            ) : (
-                              <span>Pick a date</span>
-                            )}
-                            <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                          </Button>
-                        </FormControl>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0" align="start">
-                        <Calendar
-                          mode="single"
-                          selected={field.value}
-                          onSelect={field.onChange}
-                          disabled={(date) => date < new Date()}
-                          initialFocus
-                        />
-                      </PopoverContent>
-                    </Popover>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="registration_deadline"
-                render={({ field }) => (
-                  <FormItem className="flex flex-col">
-                    <FormLabel>Registration Deadline</FormLabel>
-                     <Popover>
-                      <PopoverTrigger asChild>
-                        <FormControl>
-                          <Button
-                            variant={'outline'}
-                            className={cn(
-                              'w-full pl-3 text-left font-normal',
-                              !field.value && 'text-muted-foreground'
-                            )}
-                          >
-                            {field.value ? (
-                              format(field.value, 'PPP')
-                            ) : (
-                              <span>Pick a date</span>
-                            )}
-                            <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                          </Button>
-                        </FormControl>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0" align="start">
-                        <Calendar
-                          mode="single"
-                          selected={field.value}
-                          onSelect={field.onChange}
-                           disabled={(date) => date > (form.getValues('competition_date') || new Date()) || date < new Date()}
-                          initialFocus
-                        />
-                      </PopoverContent>
-                    </Popover>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
+            <FormField
+              control={form.control}
+              name="organized_by"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Organized By</FormLabel>
+                  <FormControl>
+                    <Input placeholder="e.g., Anytown Taekwondo Association" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="competition_date"
+              render={({ field }) => (
+                <FormItem className="flex flex-col">
+                  <FormLabel>Competition Date</FormLabel>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <FormControl>
+                        <Button
+                          variant={'outline'}
+                          className={cn(
+                            'w-full pl-3 text-left font-normal',
+                            !field.value && 'text-muted-foreground'
+                          )}
+                        >
+                          {field.value ? (
+                            format(field.value, 'PPP')
+                          ) : (
+                            <span>Pick a date</span>
+                          )}
+                          <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                        </Button>
+                      </FormControl>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <Calendar
+                        mode="single"
+                        selected={field.value}
+                        onSelect={field.onChange}
+                        disabled={(date) => date < new Date()}
+                        initialFocus
+                      />
+                    </PopoverContent>
+                  </Popover>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                <FormField
@@ -316,20 +284,6 @@ export function CompetitionForm({ isOpen, setIsOpen, competition }: CompetitionF
                   )}
                 />
             </div>
-            
-            <FormField
-              control={form.control}
-              name="description"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Description (Optional)</FormLabel>
-                  <FormControl>
-                    <Textarea placeholder="Describe the competition..." {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
 
             <FormField
               control={form.control}

@@ -18,9 +18,8 @@ export type Competition = {
   id: string;
   competition_name: string;
   competition_date: string;
-  registration_deadline: string;
-  address?: string;
-  description?: string;
+  address: string;
+  organized_by: string;
   age_category: string; 
   weight_category: string;
   status: CompetitionStatusType;
