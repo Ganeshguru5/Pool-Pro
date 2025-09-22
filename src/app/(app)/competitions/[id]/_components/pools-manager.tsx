@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { Shuffle, Users, Bot, Loader2 } from 'lucide-react';
+import { Shuffle, Users, Bot, Loader2, Download } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import {
@@ -11,11 +11,19 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+  } from '@/components/ui/dropdown-menu';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
 import type { Competition, Participant } from '@/lib/types';
 import { Badge } from '@/components/ui/badge';
-import { Input } from '@/components/ui/input';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import * as XLSX from 'xlsx';
 
 interface PoolsManagerProps {
   competition: Competition;
@@ -134,19 +142,83 @@ export default function PoolsManager({ competition, participants, setParticipant
   };
   
   const poolNames = useMemo(() => ['unassigned', ...pools.filter(([key]) => key !== 'unassigned').map(([key]) => key)], [pools]);
+  
+  const handleExportPDF = () => {
+    const doc = new jsPDF();
+    doc.text(`${competition.competition_name} - Pools`, 14, 16);
+    
+    let y = 25;
+    pools.forEach(([poolName, poolParticipants]) => {
+        if (poolName === 'unassigned' && poolParticipants.length === 0) return;
+
+        const head = [['Name', 'Age', 'District']];
+        const body = poolParticipants.map(p => [p.name, p.age, p.district]);
+        
+        autoTable(doc, {
+            head: [[{content: poolName, styles: {fillColor: [22, 163, 74]}}]],
+            startY: y,
+            theme: 'plain'
+        });
+
+        autoTable(doc, {
+            head: head,
+            body: body,
+            startY: (doc as any).lastAutoTable.finalY,
+            theme: 'striped',
+            headStyles: { fillColor: [41, 128, 185] }
+        });
+
+        y = (doc as any).lastAutoTable.finalY + 10;
+    });
+
+    doc.save(`${competition.competition_name}_pools.pdf`);
+  };
+
+  const handleExportExcel = () => {
+    const wb = XLSX.utils.book_new();
+    pools.forEach(([poolName, poolParticipants]) => {
+        if(poolName === 'unassigned' && poolParticipants.length === 0) return;
+        const wsData = [
+            ['Name', 'Age', 'District'],
+            ...poolParticipants.map(p => [p.name, p.age, p.district])
+        ];
+        const ws = XLSX.utils.aoa_to_sheet(wsData);
+        XLSX.utils.book_append_sheet(wb, ws, poolName);
+    });
+    XLSX.writeFile(wb, `${competition.competition_name}_pools.xlsx`);
+  };
+
+  const hasAssignedPools = useMemo(() => pools.some(([key]) => key !== 'unassigned'), [pools]);
+
 
   return (
     <Card>
       <CardHeader>
-        <div className="flex items-start justify-between">
+        <div className="flex items-start justify-between gap-2">
             <div>
                 <CardTitle>Pool Management</CardTitle>
                 <CardDescription>Generate pools automatically or assign participants manually.</CardDescription>
             </div>
-            <Button onClick={handleGeneratePools} disabled={isLoading}>
-                {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Shuffle className="mr-2 h-4 w-4" />}
-                Generate Pools
-            </Button>
+            <div className="flex items-center gap-2">
+                <Button onClick={handleGeneratePools} disabled={isLoading}>
+                    {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Shuffle className="mr-2 h-4 w-4" />}
+                    Generate Pools
+                </Button>
+                {hasAssignedPools && (
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <Button variant="outline">
+                                <Download className="mr-2 h-4 w-4"/>
+                                Export
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent>
+                            <DropdownMenuItem onClick={handleExportPDF}>Download as PDF</DropdownMenuItem>
+                            <DropdownMenuItem onClick={handleExportExcel}>Download as Excel</DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+                )}
+            </div>
         </div>
       </CardHeader>
       <CardContent className="space-y-6">
