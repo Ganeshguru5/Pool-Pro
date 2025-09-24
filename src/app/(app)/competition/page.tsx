@@ -3,7 +3,7 @@
 import { useMemo, useState, useEffect } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import useLocalStorageState from '@/hooks/use-local-storage-state';
-import { Competition, Participant } from '@/lib/types';
+import type { Competition, Participant } from '@/lib/types';
 import CompetitionHeader from './_components/competition-header';
 import ParticipantsList from './_components/participants-list';
 import PoolsManager from './_components/pools-manager';
@@ -13,45 +13,63 @@ import { useRouter } from 'next/navigation';
 
 export default function CompetitionPage() {
     const router = useRouter();
-    const [id, setId] = useState<string | null>(null);
+    const [competitionId, setCompetitionId] = useState<string | null>(null);
+    const [isLoading, setIsLoading] = useState(true);
+    
     const [competitions] = useLocalStorageState<Competition[]>('competitions', []);
-    const [participants, setParticipants] = useLocalStorageState<Participant[]>('participants', []);
+    const [allParticipants, setAllParticipants] = useLocalStorageState<Participant[]>('participants', []);
 
     useEffect(() => {
-        // Ensure this runs only on the client
         const storedId = localStorage.getItem('selected_competition_id');
         if (storedId) {
-            setId(storedId);
+            setCompetitionId(storedId);
         } else {
             router.replace('/dashboard');
         }
     }, [router]);
 
     const competition = useMemo(() => {
-        if (!id) return null;
-        return competitions.find(c => c.id === id) || null;
-    }, [competitions, id]);
+        if (!competitionId) return null;
+        const found = competitions.find(c => c.id === competitionId);
+        return found || null;
+    }, [competitions, competitionId]);
     
     const competitionParticipants = useMemo(() => {
-        if (!id) return [];
-        return participants.filter(p => p.competition_id === id)
-    }, [participants, id]);
+        if (!competitionId) return [];
+        return allParticipants.filter(p => p.competition_id === competitionId);
+    }, [allParticipants, competitionId]);
 
-    const setCompetitionParticipants = (newParticipants: Participant[] | ((prev: Participant[]) => Participant[])) => {
-        setParticipants(prev => {
-            if (!id) return prev; // Guard against updates if id is not set
-            const otherParticipants = prev.filter(p => p.competition_id !== id);
-            const currentCompetitionParticipants = prev.filter(p => p.competition_id === id);
+    useEffect(() => {
+        // This effect runs whenever competitionId or the list of competitions changes.
+        // Once we have an ID, we check if the corresponding competition has been loaded from storage.
+        if (competitionId) {
+            // The `competitions` array from useLocalStorageState might not be populated on the first render.
+            // We set loading to false only once the competition data is actually available.
+            if (competition) {
+                setIsLoading(false);
+            }
+        } else if (localStorage.getItem('selected_competition_id') === null) {
+            // If there's no ID at all, we're likely being redirected, so we can stop loading.
+            setIsLoading(false);
+        }
+    }, [competitionId, competition, competitions]);
+
+
+    const setCompetitionParticipants = (updater: Participant[] | ((prev: Participant[]) => Participant[])) => {
+        if (!competitionId) return;
+        setAllParticipants(prev => {
+            const otherParticipants = prev.filter(p => p.competition_id !== competitionId);
+            const currentCompetitionParticipants = prev.filter(p => p.competition_id === competitionId);
             
-            const updatedCompetitionParticipants = typeof newParticipants === 'function' 
-                ? newParticipants(currentCompetitionParticipants) 
-                : newParticipants;
+            const updatedParticipants = typeof updater === 'function' 
+                ? updater(currentCompetitionParticipants) 
+                : updater;
 
-            return [...otherParticipants, ...updatedCompetitionParticipants];
+            return [...otherParticipants, ...updatedParticipants];
         });
     }
 
-    if (!id || !competition) {
+    if (isLoading || !competition) {
         return (
             <div className="flex h-full w-full items-center justify-center">
                 <Loader2 className="h-8 w-8 animate-spin text-primary" />
