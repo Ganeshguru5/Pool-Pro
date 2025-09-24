@@ -1,5 +1,3 @@
-
-
 'use client';
 import { useState } from 'react';
 import { MoreHorizontal, PlusCircle, Trash2, Edit, UserX } from 'lucide-react';
@@ -50,6 +48,16 @@ export default function ParticipantsList({ competition, participants, setPartici
   const handleDelete = (participantId: string) => {
     setParticipants(prev => prev.filter(p => p.id !== participantId));
   };
+
+  const handleFormSubmit = (newParticipantData: Participant) => {
+    if (editingParticipant) {
+      // Update existing participant
+      setParticipants(prev => prev.map(p => p.id === newParticipantData.id ? newParticipantData : p));
+    } else {
+      // Add new participant
+      setParticipants(prev => [...prev, newParticipantData]);
+    }
+  }
 
   return (
     <>
@@ -140,7 +148,7 @@ export default function ParticipantsList({ competition, participants, setPartici
         setIsOpen={setDialogOpen}
         participant={editingParticipant}
         competition={competition}
-        setParticipants={setParticipants}
+        onFormSubmit={handleFormSubmit}
       />
     </>
   );

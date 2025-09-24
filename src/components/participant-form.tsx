@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useEffect } from 'react';
@@ -46,10 +45,10 @@ interface ParticipantFormProps {
   setIsOpen: (isOpen: boolean) => void;
   participant: Participant | null;
   competition: Competition;
-  setParticipants: React.Dispatch<React.SetStateAction<Participant[]>>;
+  onFormSubmit: (participant: Participant) => void;
 }
 
-export function ParticipantForm({ isOpen, setIsOpen, participant, competition, setParticipants }: ParticipantFormProps) {
+export function ParticipantForm({ isOpen, setIsOpen, participant, competition, onFormSubmit }: ParticipantFormProps) {
   const { toast } = useToast();
   
   const form = useForm<ParticipantFormValues>({
@@ -81,13 +80,11 @@ export function ParticipantForm({ isOpen, setIsOpen, participant, competition, s
       pool_assignment: participant ? participant.pool_assignment : null,
     };
 
+    onFormSubmit(newParticipant);
+
     if (participant) {
-      setParticipants(prev =>
-        prev.map(p => (p.id === participant.id ? newParticipant : p))
-      );
       toast({ title: 'Success', description: 'Participant updated successfully.' });
     } else {
-      setParticipants(prev => [...prev, newParticipant]);
       toast({ title: 'Success', description: 'Participant added successfully.' });
     }
 

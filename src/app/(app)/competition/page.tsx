@@ -1,3 +1,4 @@
+
 'use client';
 import { useMemo, useState, useEffect } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -17,6 +18,7 @@ export default function CompetitionPage() {
     const [participants, setParticipants] = useLocalStorageState<Participant[]>('participants', []);
 
     useEffect(() => {
+        // Ensure this runs only on the client
         const storedId = localStorage.getItem('selected_competition_id');
         if (storedId) {
             setId(storedId);
@@ -25,8 +27,29 @@ export default function CompetitionPage() {
         }
     }, [router]);
 
-    const competition = useMemo(() => competitions.find(c => c.id === id), [competitions, id]);
-    const competitionParticipants = useMemo(() => participants.filter(p => p.competition_id === id), [participants, id]);
+    const competition = useMemo(() => {
+        if (!id) return null;
+        return competitions.find(c => c.id === id) || null;
+    }, [competitions, id]);
+    
+    const competitionParticipants = useMemo(() => {
+        if (!id) return [];
+        return participants.filter(p => p.competition_id === id)
+    }, [participants, id]);
+
+    const setCompetitionParticipants = (newParticipants: Participant[] | ((prev: Participant[]) => Participant[])) => {
+        setParticipants(prev => {
+            if (!id) return prev; // Guard against updates if id is not set
+            const otherParticipants = prev.filter(p => p.competition_id !== id);
+            const currentCompetitionParticipants = prev.filter(p => p.competition_id === id);
+            
+            const updatedCompetitionParticipants = typeof newParticipants === 'function' 
+                ? newParticipants(currentCompetitionParticipants) 
+                : newParticipants;
+
+            return [...otherParticipants, ...updatedCompetitionParticipants];
+        });
+    }
 
     if (!id || !competition) {
         return (
@@ -46,10 +69,10 @@ export default function CompetitionPage() {
                     <TabsTrigger value="analytics">Analytics</TabsTrigger>
                 </TabsList>
                 <TabsContent value="participants" className="space-y-4">
-                    <ParticipantsList competition={competition} participants={competitionParticipants} setParticipants={setParticipants} />
+                    <ParticipantsList competition={competition} participants={competitionParticipants} setParticipants={setCompetitionParticipants} />
                 </TabsContent>
                 <TabsContent value="pools" className="space-y-4">
-                    <PoolsManager competition={competition} participants={competitionParticipants} setParticipants={setParticipants}/>
+                    <PoolsManager competition={competition} participants={competitionParticipants} setParticipants={setCompetitionParticipants}/>
                 </TabsContent>
                 <TabsContent value="analytics" className="space-y-4">
                     <CompetitionAnalytics participants={competitionParticipants} />
