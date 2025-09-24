@@ -11,10 +11,9 @@ import CompetitionAnalytics from './_components/competition-analytics';
 import { Loader2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
-export default function CompetitionPage() {
+function CompetitionPageContent() {
     const router = useRouter();
     const [competitionId, setCompetitionId] = useState<string | null>(null);
-    const [isLoading, setIsLoading] = useState(true);
     
     const [competitions] = useLocalStorageState<Competition[]>('competitions', []);
     const [allParticipants, setAllParticipants] = useLocalStorageState<Participant[]>('participants', []);
@@ -30,8 +29,7 @@ export default function CompetitionPage() {
 
     const competition = useMemo(() => {
         if (!competitionId) return null;
-        const found = competitions.find(c => c.id === competitionId);
-        return found || null;
+        return competitions.find(c => c.id === competitionId) || null;
     }, [competitions, competitionId]);
     
     const competitionParticipants = useMemo(() => {
@@ -39,37 +37,21 @@ export default function CompetitionPage() {
         return allParticipants.filter(p => p.competition_id === competitionId);
     }, [allParticipants, competitionId]);
 
-    useEffect(() => {
-        // This effect runs whenever competitionId or the list of competitions changes.
-        // Once we have an ID, we check if the corresponding competition has been loaded from storage.
-        if (competitionId) {
-            // The `competitions` array from useLocalStorageState might not be populated on the first render.
-            // We set loading to false only once the competition data is actually available.
-            if (competition) {
-                setIsLoading(false);
-            }
-        } else if (localStorage.getItem('selected_competition_id') === null) {
-            // If there's no ID at all, we're likely being redirected, so we can stop loading.
-            setIsLoading(false);
-        }
-    }, [competitionId, competition, competitions]);
-
-
     const setCompetitionParticipants = (updater: Participant[] | ((prev: Participant[]) => Participant[])) => {
         if (!competitionId) return;
         setAllParticipants(prev => {
             const otherParticipants = prev.filter(p => p.competition_id !== competitionId);
             const currentCompetitionParticipants = prev.filter(p => p.competition_id === competitionId);
             
-            const updatedParticipants = typeof updater === 'function' 
+            const newParticipantsForCompetition = typeof updater === 'function' 
                 ? updater(currentCompetitionParticipants) 
                 : updater;
 
-            return [...otherParticipants, ...updatedParticipants];
+            return [...otherParticipants, ...newParticipantsForCompetition];
         });
-    }
+    };
 
-    if (isLoading || !competition) {
+    if (!competition) {
         return (
             <div className="flex h-full w-full items-center justify-center">
                 <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -96,6 +78,20 @@ export default function CompetitionPage() {
                     <CompetitionAnalytics participants={competitionParticipants} />
                 </TabsContent>
             </Tabs>
+        </div>
+    );
+}
+
+export default function CompetitionPage() {
+    const [isClient, setIsClient] = useState(false);
+
+    useEffect(() => {
+        setIsClient(true);
+    }, []);
+
+    return isClient ? <CompetitionPageContent /> : (
+        <div className="flex h-full w-full items-center justify-center">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
         </div>
     );
 }
