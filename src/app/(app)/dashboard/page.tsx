@@ -1,3 +1,4 @@
+
 'use client';
 import { useState } from 'react';
 import { PlusCircle, Users } from 'lucide-react';
@@ -51,6 +52,11 @@ export default function DashboardPage() {
   };
   
   const router = useRouter();
+
+  const handleManageCompetition = (competitionId: string) => {
+    localStorage.setItem('selected_competition_id', competitionId);
+    router.push('/competition');
+  }
 
   return (
     <>
@@ -133,7 +139,7 @@ export default function DashboardPage() {
                 </div>
               </CardContent>
               <div className="p-6 pt-0">
-                <Button variant="outline" className="w-full" onClick={() => router.push(`/competitions/${comp.id}`)}>
+                <Button variant="outline" className="w-full" onClick={() => handleManageCompetition(comp.id)}>
                     Manage Competition
                 </Button>
               </div>
