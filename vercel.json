@@ -1,5 +1,5 @@
 {
-  "version": 3,
+  "version": 2,
   "builds": [
     {
       "src": "package.json",
@@ -15,8 +15,5 @@
   "env": {
     "NEXT_PUBLIC_API_URL": "@next_public_api_url",
     "OTHER_ENV_VAR": "@other_env_var"
-  },
-  "github": {
-    "silent": true
   }
 }
