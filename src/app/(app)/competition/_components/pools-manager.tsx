@@ -167,7 +167,9 @@ export default function PoolsManager({ competition, participants, setParticipant
       
       doc.setFontSize(10);
       doc.setFont('helvetica', 'normal');
-      doc.text(`Date: ${format(new Date(competition.competition_date), 'dd/MM/yyyy')}`, pageWidth / 2, 26, { align: 'center' });
+      if (competition.competition_date && !isNaN(new Date(competition.competition_date).getTime())) {
+        doc.text(`Date: ${format(new Date(competition.competition_date), 'dd/MM/yyyy')}`, pageWidth / 2, 26, { align: 'center' });
+      }
       doc.text(`Organized by: ${competition.organized_by}`, pageWidth / 2, 32, { align: 'center' });
       doc.text(competition.address, pageWidth / 2, 38, { align: 'center' });
 

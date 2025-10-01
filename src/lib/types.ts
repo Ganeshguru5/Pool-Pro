@@ -17,7 +17,8 @@ export type WeightCategory = {
 export type Competition = {
   id: string;
   competition_name: string;
-  competition_date: string;
+  start_date: string;
+  end_date: string;
   address: string;
   organized_by: string;
   age_category: string; 

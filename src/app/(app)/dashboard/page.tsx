@@ -122,7 +122,7 @@ export default function DashboardPage() {
               </CardHeader>
               <CardContent className="flex-grow space-y-4">
                  <div className="text-sm text-muted-foreground">
-                  Date: {format(new Date(comp.competition_date), 'PPP')}
+                  Date: {format(new Date(comp.start_date), 'PPP')}
                 </div>
                  <div className="flex items-center">
                   <Users className="mr-2 h-4 w-4 text-muted-foreground" />
