@@ -192,16 +192,14 @@ export default function PoolsManager({ competition, participants, setParticipant
       }
       
       const bracketSize = Math.pow(2, Math.ceil(Math.log2(numParticipants)));
-      const byes = bracketSize - numParticipants;
       
       const distributePlayers = (players: Participant[]) => {
-        const bracketSlots = bracketSize;
-        const playerPositions: (Participant | 'BYE')[] = new Array(bracketSlots).fill('BYE');
+        const slots = Math.pow(2, Math.ceil(Math.log2(players.length)));
+        const playerPositions: (Participant | 'BYE')[] = new Array(slots).fill('BYE');
         if (players.length === 0) return playerPositions;
     
-        // Standard seeding for single-elimination
         const seedOrder = [1];
-        for (let i = 1; i < Math.log2(bracketSlots); i++) {
+        for (let i = 1; i < Math.log2(slots); i++) {
           const round = seedOrder.map(j => (2 ** (i + 1) + 1 - j));
           seedOrder.push(...round.reverse());
         }
@@ -234,7 +232,7 @@ export default function PoolsManager({ competition, participants, setParticipant
       }
 
       const drawBracket = (positions: number[], roundNum: number) => {
-        if (positions.length < 2) {
+        if (positions.length <= 1) {
             // Draw winner line
              if (positions.length === 1) {
                 const winnerX = startX + playerBoxWidth + (horizontalGap / 2) * (2 * roundNum - 1);
@@ -285,8 +283,15 @@ export default function PoolsManager({ competition, participants, setParticipant
               const pairIndex = Math.floor(i/2);
               const otherInPair = i % 2 === 0 ? finalPlayerOrder[i+1] : finalPlayerOrder[i-1];
               if (otherInPair === 'BYE') {
-                  const nextRoundY = (firstRoundYPositions[pairIndex*2] + firstRoundYPositions[pairIndex*2+1])/2;
-                  doc.line(startX + playerBoxWidth, currentY, startX + playerBoxWidth + horizontalGap, nextRoundY);
+                  const p1_y = firstRoundYPositions[pairIndex*2];
+                  const p2_y = firstRoundYPositions[pairIndex*2+1];
+                  // Check if both y positions are valid numbers
+                  if (p1_y && p2_y) {
+                    const nextRoundY = (p1_y + p2_y) / 2;
+                    doc.line(startX + playerBoxWidth, currentY, startX + playerBoxWidth + horizontalGap, nextRoundY);
+                  } else if (p1_y) { // Case for last player with a bye
+                    doc.line(startX + playerBoxWidth, currentY, startX + playerBoxWidth + horizontalGap, currentY);
+                  }
               }
 
           } else {
@@ -399,5 +404,3 @@ export default function PoolsManager({ competition, participants, setParticipant
     </Card>
   );
 }
-
-    
