@@ -192,92 +192,109 @@ export default function PoolsManager({ competition, participants, setParticipant
       }
       
       const bracketSize = Math.pow(2, Math.ceil(Math.log2(numParticipants)));
+      const byes = bracketSize - numParticipants;
       
-      const distributePlayers = (slots: number, playersToPlace: Participant[]) => {
-        const playerPositions: (Participant | 'BYE')[] = new Array(slots).fill('BYE');
-        if (playersToPlace.length === 0) return playerPositions;
-        
-        // Base case for recursion
-        if (playersToPlace.length === 1) {
-            playerPositions[0] = playersToPlace[0];
-            return playerPositions;
+      const distributePlayers = (players: Participant[]) => {
+        const bracketSlots = bracketSize;
+        const playerPositions: (Participant | 'BYE')[] = new Array(bracketSlots).fill('BYE');
+        if (players.length === 0) return playerPositions;
+    
+        // Standard seeding for single-elimination
+        const seedOrder = [1];
+        for (let i = 1; i < Math.log2(bracketSlots); i++) {
+          const round = seedOrder.map(j => (2 ** (i + 1) + 1 - j));
+          seedOrder.push(...round.reverse());
         }
-
-        const mid = Math.ceil(slots / 2);
-        const topPlayers = playersToPlace.slice(0, Math.ceil(playersToPlace.length / 2));
-        const bottomPlayers = playersToPlace.slice(Math.ceil(playersToPlace.length / 2));
         
-        const topPositions = distributePlayers(mid, topPlayers);
-        const bottomPositions = distributePlayers(slots - mid, bottomPlayers);
+        let playerIndex = 0;
+        seedOrder.forEach(seed => {
+            if (players[playerIndex]) {
+                playerPositions[seed - 1] = players[playerIndex];
+                playerIndex++;
+            }
+        });
         
-        return [...topPositions, ...bottomPositions];
+        return playerPositions;
       };
 
-      const finalPlayerOrder = distributePlayers(bracketSize, poolParticipants);
+      const finalPlayerOrder = distributePlayers(poolParticipants);
 
-      const playerBoxHeight = 8;
-      const verticalGap = 2;
+      const playerBoxHeight = 10;
+      const verticalGap = 4;
       const playerBoxWidth = 70;
       const horizontalGap = 20;
       const startX = 14;
-      const startY = yPos + 15;
+      let startY = yPos + 15;
 
       const totalHeight = bracketSize * (playerBoxHeight + verticalGap) - verticalGap;
       const pageHeight = doc.internal.pageSize.getHeight();
       
-      const effectiveStartY = (pageHeight - totalHeight < startY) ? 20 : startY; // Adjust if bracket is too tall
+      if (startY + totalHeight > pageHeight - 20) {
+        startY = 20; // Adjust if bracket is too tall
+      }
+
+      const drawBracket = (positions: number[], roundNum: number) => {
+        if (positions.length < 2) {
+            // Draw winner line
+             if (positions.length === 1) {
+                const winnerX = startX + playerBoxWidth + (horizontalGap / 2) * (2 * roundNum - 1);
+                const winnerY = positions[0];
+                doc.line(winnerX, winnerY, winnerX + horizontalGap, winnerY);
+            }
+            return;
+        }
+    
+        const nextRoundPositions: number[] = [];
+        const currentX = startX + playerBoxWidth + (horizontalGap / 2) * (2 * roundNum - 1);
+    
+        for (let i = 0; i < positions.length; i += 2) {
+            const y1 = positions[i];
+            const y2 = positions[i + 1];
+            
+            const midY = (y1 + y2) / 2;
+            nextRoundPositions.push(midY);
+    
+            // Vertical line connecting two players/matches
+            doc.line(currentX, y1, currentX, y2);
+            
+            // Horizontal line to next match
+            doc.line(currentX, midY, currentX + horizontalGap, midY);
+        }
+    
+        drawBracket(nextRoundPositions, roundNum + 1);
+      };
 
       // Draw players and first round lines
       const firstRoundYPositions: number[] = [];
       finalPlayerOrder.forEach((p, i) => {
-          const currentY = effectiveStartY + i * (playerBoxHeight + verticalGap) + playerBoxHeight / 2;
+          const currentY = startY + i * (playerBoxHeight + verticalGap) + playerBoxHeight / 2;
           firstRoundYPositions.push(currentY);
 
+          const boxY = currentY - playerBoxHeight / 2;
+          doc.rect(startX, boxY, playerBoxWidth, playerBoxHeight);
+          doc.setFontSize(8);
+          
           if (p !== 'BYE') {
-              doc.rect(startX, currentY - playerBoxHeight / 2, playerBoxWidth, playerBoxHeight);
-              doc.setFontSize(8);
-              
               const districtText = `${i + 1} ${p.district}`;
-              doc.text(districtText, startX + 2, currentY + 1);
+              doc.text(districtText, startX + 2, boxY + 4);
               
               const participantName = p.name;
-              doc.text(participantName, startX + 15, currentY + 1);
+              doc.text(participantName, startX + 2, boxY + 8);
+
+              // Check for byes to draw connecting line
+              const pairIndex = Math.floor(i/2);
+              const otherInPair = i % 2 === 0 ? finalPlayerOrder[i+1] : finalPlayerOrder[i-1];
+              if (otherInPair === 'BYE') {
+                  const nextRoundY = (firstRoundYPositions[pairIndex*2] + firstRoundYPositions[pairIndex*2+1])/2;
+                  doc.line(startX + playerBoxWidth, currentY, startX + playerBoxWidth + horizontalGap, nextRoundY);
+              }
 
           } else {
-            // Find the player in the pair that has a bye
-            const pairIndex = Math.floor(i / 2);
-            const playerInPair = finalPlayerOrder[pairIndex*2] !== 'BYE' ? finalPlayerOrder[pairIndex*2] : finalPlayerOrder[pairIndex*2+1];
-            if (playerInPair && typeof playerInPair !== 'string') {
-              const playerY = effectiveStartY + (pairIndex * 2 + (finalPlayerOrder[pairIndex*2] !== 'BYE' ? 0 : 1)) * (playerBoxHeight + verticalGap) + playerBoxHeight / 2;
-              const nextRoundY = (firstRoundYPositions[pairIndex*2] + firstRoundYPositions[pairIndex*2+1])/2;
-              doc.line(startX + playerBoxWidth, playerY, startX + playerBoxWidth + horizontalGap, nextRoundY);
-            }
+            doc.text('BYE', startX + 2, currentY + 1);
           }
       });
       
-      // Draw subsequent rounds
-      let roundPositions = firstRoundYPositions;
-      let roundNum = 1;
-      while (roundPositions.length > 1) {
-          const nextRoundPositions: number[] = [];
-          const currentX = startX + playerBoxWidth + (horizontalGap / 2) * (2 * roundNum - 1);
-          
-          for (let i = 0; i < roundPositions.length; i += 2) {
-              const y1 = roundPositions[i];
-              const y2 = roundPositions[i+1];
-              
-              const midY = (y1 + y2) / 2;
-              nextRoundPositions.push(midY);
-              
-              // Vertical line connecting two players/matches
-              doc.line(currentX, y1, currentX, y2);
-              
-              // Horizontal line to next match
-              doc.line(currentX, midY, currentX + horizontalGap, midY);
-          }
-          roundPositions = nextRoundPositions;
-          roundNum++;
-      }
+      drawBracket(firstRoundYPositions, 1);
     });
   
     doc.save(`${competition.competition_name}_pools.pdf`);
