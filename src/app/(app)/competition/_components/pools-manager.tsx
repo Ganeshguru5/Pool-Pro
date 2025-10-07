@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useState, useMemo } from 'react';
@@ -155,11 +156,11 @@ export default function PoolsManager({ competition, participants, setParticipant
     pools.forEach(([poolName, poolParticipants], poolIndex) => {
       if (poolName === 'unassigned' || poolParticipants.length === 0) return;
   
-      if (poolIndex > 0 && !(pools[0][0] === 'unassigned' && pools[0][1].length === 0 && poolIndex === 1)) {
+      const isFirstPage = poolIndex === 0 || (poolIndex > 0 && pools[0][0] === 'unassigned' && pools[0][1].length === 0 && poolIndex === 1);
+      if (!isFirstPage) {
         doc.addPage();
       }
   
-      // --- Header ---
       doc.setFontSize(16);
       doc.setFont('helvetica', 'bold');
       doc.text(competition.competition_name, pageWidth / 2, 20, { align: 'center' });
@@ -185,7 +186,6 @@ export default function PoolsManager({ competition, participants, setParticipant
         doc.text(weightCategoryDescription, 14, yPos + 4);
       }
       
-      // --- Bracket Logic ---
       const numParticipants = poolParticipants.length;
       if (numParticipants < 2) {
         doc.text("Not enough participants to create a bracket.", 14, yPos + 15);
@@ -195,152 +195,82 @@ export default function PoolsManager({ competition, participants, setParticipant
       const bracketSize = Math.pow(2, Math.ceil(Math.log2(numParticipants)));
       const byes = bracketSize - numParticipants;
       
-      // Distribute participants and byes strategically
-      let participantsWithByes: (Participant | null)[] = [];
-      if (byes > 0) {
-          const p_copy = [...poolParticipants];
-          participantsWithByes = new Array(bracketSize).fill(null);
-          
-          // Standard seeding distribution for byes
-          const indices: number[] = [];
-          let i = 0;
-          let nextPowerOf2 = 2;
-          while(i < bracketSize) {
-              indices.push(i);
-              if (indices.length === nextPowerOf2) {
-                  indices.reverse();
-                  nextPowerOf2 *= 2;
-              }
-              i++;
-          }
-          
-          let p_i = 0;
-          while(p_i < byes) {
-            // Assign byes to seeded positions first
-            p_i++;
-          }
-          
-          p_i=0;
-          const byePositions = [0, bracketSize-1, bracketSize/2, bracketSize/2-1, bracketSize/4, bracketSize - bracketSize/4 -1];
-          let assignedByeCount = 0;
-          while(assignedByeCount < byes){
-              let bye_idx = byePositions.shift();
-              if(bye_idx !== undefined){
-                participantsWithByes[bye_idx] = "BYE" as any;
-                assignedByeCount++;
-              } else {
-                break;
-              }
-          }
+      // Distribute byes
+      let players = [...poolParticipants];
+      let bracketSlots: (Participant | 'BYE')[] = new Array(bracketSize).fill('BYE');
 
-          for(let i=0; i<bracketSize; i++){
-            if(participantsWithByes[i] === null){
-                if(p_copy.length > 0){
-                    participantsWithByes[i] = p_copy.shift()!;
-                }
-            }
-          }
-      } else {
-        participantsWithByes = poolParticipants;
-      }
+      const distributePlayers = (slots: number, playersToPlace: Participant[]) => {
+        const playerPositions: (Participant | 'BYE')[] = new Array(slots).fill('BYE');
+        if (playersToPlace.length === 0) return playerPositions;
+        
+        const mid = Math.ceil(slots / 2);
+        const topPlayers = playersToPlace.slice(0, Math.ceil(playersToPlace.length / 2));
+        const bottomPlayers = playersToPlace.slice(Math.ceil(playersToPlace.length / 2));
+        
+        const topPositions = distributePlayers(mid, topPlayers);
+        const bottomPositions = distributePlayers(slots - mid, bottomPlayers);
+        
+        return [...topPositions, ...bottomPositions];
+      };
 
+      const finalPlayerOrder = distributePlayers(bracketSize, players);
 
-      const playerBoxHeight = 12;
-      const verticalGap = 4; // Reduced from 8
-      const playerBoxWidth = 60;
+      const playerBoxHeight = 8;
+      const verticalGap = 2;
+      const playerBoxWidth = 70;
       const horizontalGap = 20;
       const startX = 14;
       const startY = yPos + 15;
 
-      const drawBracket = (participants: (Participant | null | 'BYE')[], x: number, y: number, round: number): number[] => {
-          if (participants.length <= 1) {
-              if (participants[0]) { // Draw final line for winner
-                  doc.line(x, y + playerBoxHeight / 2, x + horizontalGap, y + playerBoxHeight / 2);
-              }
-              return [y + playerBoxHeight / 2];
-          }
+      const totalHeight = bracketSize * (playerBoxHeight + verticalGap) - verticalGap;
+      const pageHeight = doc.internal.pageSize.getHeight();
+      
+      const effectiveStartY = (pageHeight - totalHeight < startY) ? 20 : startY; // Adjust if bracket is too tall
 
-          const mid = Math.ceil(participants.length / 2);
-          const topHalf = participants.slice(0, mid);
-          const bottomHalf = participants.slice(mid);
+      // Draw players and first round lines
+      const firstRoundYPositions: number[] = [];
+      finalPlayerOrder.forEach((p, i) => {
+          const currentY = effectiveStartY + i * (playerBoxHeight + verticalGap) + playerBoxHeight / 2;
+          firstRoundYPositions.push(currentY);
 
-          const yGap = (playerBoxHeight + verticalGap) * Math.pow(2, round - 1);
-          const topYPositions = drawBracket(topHalf, x + horizontalGap, y, round + 1);
-          
-          const yOffsetForBottom = topYPositions.length * yGap;
-          const bottomYPositions = drawBracket(bottomHalf, x + horizontalGap, y + yOffsetForBottom, round + 1);
-
-          const allYPositions = [...topYPositions, ...bottomYPositions];
-
-          if (round === 1) {
-              participants.forEach((p, i) => {
-                  const currentY = y + i * (playerBoxHeight + verticalGap);
-                  if (p && p !== 'BYE') {
-                      doc.rect(x, currentY, playerBoxWidth, playerBoxHeight);
-                      doc.setFontSize(7);
-                      doc.text(p.district, x + 2, currentY + 4);
-                      doc.setFontSize(9);
-                      doc.text(p.name, x + 2, currentY + 9);
-                  } else if (p === 'BYE') {
-                      doc.setFontSize(9);
-                      doc.text("BYE", x + 2, currentY + 7);
-                  }
-                  allYPositions[i] = currentY; // Store initial positions
-              });
-          }
-
-          let connectionPoints = [];
-          for (let i = 0; i < allYPositions.length; i += 2) {
-              const y1 = allYPositions[i] + (round > 1 ? 0 : playerBoxHeight / 2);
-              let y2_val = allYPositions[i + 1];
+          if (p !== 'BYE') {
+              doc.rect(startX, currentY - playerBoxHeight / 2, playerBoxWidth, playerBoxHeight);
+              doc.setFontSize(8);
               
-              if(y2_val === undefined) { // Handle odd number of participants in a round (bye)
-                  connectionPoints.push(y1);
-                  doc.line(x, y1, x - horizontalGap, y1);
-                  continue;
-              }
+              const districtText = `${i + 1} ${p.district}`;
+              doc.text(districtText, startX + 2, currentY + 1);
+              
+              const participantName = p.name;
+              doc.text(participantName, startX + 15, currentY + 1);
 
-              const y2 = y2_val + (round > 1 ? 0 : playerBoxHeight / 2);
-
-              const lineX = x;
-              doc.line(lineX, y1, lineX, y2); // Vertical connector
+              // Connect to first match
+              doc.line(startX + playerBoxWidth, currentY, startX + playerBoxWidth + horizontalGap / 2, currentY);
+          }
+      });
+      
+      // Draw subsequent rounds
+      let roundPositions = firstRoundYPositions;
+      let roundNum = 1;
+      while (roundPositions.length > 1) {
+          const nextRoundPositions: number[] = [];
+          const currentX = startX + playerBoxWidth + (horizontalGap / 2) * (2 * roundNum - 1);
+          
+          for (let i = 0; i < roundPositions.length; i += 2) {
+              const y1 = roundPositions[i];
+              const y2 = roundPositions[i+1];
               
               const midY = (y1 + y2) / 2;
-              doc.line(lineX, midY, lineX - horizontalGap, midY); // Horizontal connector to previous round
-
-              if (round > 1) {
-                const p1 = participants[i];
-                const p2 = participants[i+1];
-                if(p1 && p1 !== 'BYE'){ doc.line(lineX, y1, lineX + horizontalGap, y1);}
-                if(p2 && p2 !== 'BYE'){ doc.line(lineX, y2, lineX + horizontalGap, y2);}
-                if( (p1 && p1 !== 'BYE') && (!p2 || p2 === 'BYE') ) { doc.line(lineX, y1, lineX - horizontalGap, y1) }
-                if( (p2 && p2 !== 'BYE') && (!p1 || p1 === 'BYE') ) { doc.line(lineX, y2, lineX - horizontalGap, y2) }
-
-              } else {
-                 const p1 = participants[i];
-                 const p2 = participants[i+1];
-                 const player1LineY = y + i * (playerBoxHeight + verticalGap) + playerBoxHeight/2;
-                 const player2LineY = y + (i+1) * (playerBoxHeight + verticalGap) + playerBoxHeight/2;
-                 
-                 if (p1 && p1 !== 'BYE') {
-                    doc.line(x, player1LineY, x + horizontalGap, player1LineY);
-                 }
-                 if (p2 && p2 !== 'BYE') {
-                    doc.line(x, player2LineY, x + horizontalGap, player2LineY);
-                 }
-                 if ((p1 && p1 !== 'BYE') && (!p2 || p2 === 'BYE')) {
-                     const byeWinnerY = (player1LineY + player2LineY) / 2;
-                     doc.line(x, player1LineY, x, byeWinnerY);
-                     doc.line(x, byeWinnerY, x - horizontalGap, byeWinnerY);
-                 }
-              }
+              nextRoundPositions.push(midY);
               
-              connectionPoints.push(midY);
+              // Vertical line connecting two players/matches
+              doc.line(currentX, y1, currentX, y2);
+              
+              // Horizontal line to next match
+              doc.line(currentX, midY, currentX + horizontalGap, midY);
           }
-          return connectionPoints;
-      };
-
-      drawBracket(participantsWithByes.map(p=> p? p : 'BYE'), startX, startY, 1);
+          roundPositions = nextRoundPositions;
+          roundNum++;
+      }
     });
   
     doc.save(`${competition.competition_name}_pools.pdf`);
