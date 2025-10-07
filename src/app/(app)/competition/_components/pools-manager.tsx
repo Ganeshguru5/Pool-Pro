@@ -196,38 +196,47 @@ export default function PoolsManager({ competition, participants, setParticipant
       const byes = bracketSize - numParticipants;
       
       // Distribute participants and byes strategically
-      let participantsWithByes = [];
+      let participantsWithByes: (Participant | null)[] = [];
       if (byes > 0) {
-          const halfBracket = Math.ceil(bracketSize / 2);
-          let p_idx = 0;
-          for(let i=0; i<bracketSize; i++) {
-              // This is a simple distribution, for real tournaments look up seeding algorithms
-              if (i % 2 === 1 && (byes - (i - p_idx)) > 0) {
-                  participantsWithByes.push(null); // bye
-              } else if (p_idx < numParticipants) {
-                  participantsWithByes.push(poolParticipants[p_idx]);
-                  p_idx++;
-              } else {
-                   participantsWithByes.push(null); // bye
-              }
-          }
-          // A better bye distribution
           const p_copy = [...poolParticipants];
           participantsWithByes = new Array(bracketSize).fill(null);
-          let indices = [0, bracketSize-1, bracketSize/2, bracketSize/2 - 1];
+          
+          // Standard seeding distribution for byes
+          const indices: number[] = [];
+          let i = 0;
+          let nextPowerOf2 = 2;
+          while(i < bracketSize) {
+              indices.push(i);
+              if (indices.length === nextPowerOf2) {
+                  indices.reverse();
+                  nextPowerOf2 *= 2;
+              }
+              i++;
+          }
+          
           let p_i = 0;
-          while(p_i < numParticipants){
-            let idx = indices.shift();
-            if(idx !== undefined && participantsWithByes[idx] === null) {
-                participantsWithByes[idx] = p_copy.shift();
-                p_i++;
-            } else {
-                let empty_idx = participantsWithByes.findIndex(p => p===null);
-                if(empty_idx !== -1) {
-                    participantsWithByes[empty_idx] = p_copy.shift();
-                    p_i++;
-                } else {
-                    break; // Should not happen
+          while(p_i < byes) {
+            // Assign byes to seeded positions first
+            p_i++;
+          }
+          
+          p_i=0;
+          const byePositions = [0, bracketSize-1, bracketSize/2, bracketSize/2-1, bracketSize/4, bracketSize - bracketSize/4 -1];
+          let assignedByeCount = 0;
+          while(assignedByeCount < byes){
+              let bye_idx = byePositions.shift();
+              if(bye_idx !== undefined){
+                participantsWithByes[bye_idx] = "BYE" as any;
+                assignedByeCount++;
+              } else {
+                break;
+              }
+          }
+
+          for(let i=0; i<bracketSize; i++){
+            if(participantsWithByes[i] === null){
+                if(p_copy.length > 0){
+                    participantsWithByes[i] = p_copy.shift()!;
                 }
             }
           }
@@ -237,13 +246,13 @@ export default function PoolsManager({ competition, participants, setParticipant
 
 
       const playerBoxHeight = 12;
-      const verticalGap = 8; 
+      const verticalGap = 4; // Reduced from 8
       const playerBoxWidth = 60;
       const horizontalGap = 20;
       const startX = 14;
       const startY = yPos + 15;
 
-      const drawBracket = (participants: (Participant | null)[], x: number, y: number, round: number): number[] => {
+      const drawBracket = (participants: (Participant | null | 'BYE')[], x: number, y: number, round: number): number[] => {
           if (participants.length <= 1) {
               if (participants[0]) { // Draw final line for winner
                   doc.line(x, y + playerBoxHeight / 2, x + horizontalGap, y + playerBoxHeight / 2);
@@ -255,9 +264,10 @@ export default function PoolsManager({ competition, participants, setParticipant
           const topHalf = participants.slice(0, mid);
           const bottomHalf = participants.slice(mid);
 
+          const yGap = (playerBoxHeight + verticalGap) * Math.pow(2, round - 1);
           const topYPositions = drawBracket(topHalf, x + horizontalGap, y, round + 1);
           
-          const yOffsetForBottom = topYPositions.length * (playerBoxHeight + verticalGap) * Math.pow(2, round - 1);
+          const yOffsetForBottom = topYPositions.length * yGap;
           const bottomYPositions = drawBracket(bottomHalf, x + horizontalGap, y + yOffsetForBottom, round + 1);
 
           const allYPositions = [...topYPositions, ...bottomYPositions];
@@ -265,12 +275,15 @@ export default function PoolsManager({ competition, participants, setParticipant
           if (round === 1) {
               participants.forEach((p, i) => {
                   const currentY = y + i * (playerBoxHeight + verticalGap);
-                  if (p) {
+                  if (p && p !== 'BYE') {
                       doc.rect(x, currentY, playerBoxWidth, playerBoxHeight);
                       doc.setFontSize(7);
                       doc.text(p.district, x + 2, currentY + 4);
                       doc.setFontSize(9);
                       doc.text(p.name, x + 2, currentY + 9);
+                  } else if (p === 'BYE') {
+                      doc.setFontSize(9);
+                      doc.text("BYE", x + 2, currentY + 7);
                   }
                   allYPositions[i] = currentY; // Store initial positions
               });
@@ -279,7 +292,15 @@ export default function PoolsManager({ competition, participants, setParticipant
           let connectionPoints = [];
           for (let i = 0; i < allYPositions.length; i += 2) {
               const y1 = allYPositions[i] + (round > 1 ? 0 : playerBoxHeight / 2);
-              const y2 = allYPositions[i + 1] + (round > 1 ? 0 : playerBoxHeight / 2);
+              let y2_val = allYPositions[i + 1];
+              
+              if(y2_val === undefined) { // Handle odd number of participants in a round (bye)
+                  connectionPoints.push(y1);
+                  doc.line(x, y1, x - horizontalGap, y1);
+                  continue;
+              }
+
+              const y2 = y2_val + (round > 1 ? 0 : playerBoxHeight / 2);
 
               const lineX = x;
               doc.line(lineX, y1, lineX, y2); // Vertical connector
@@ -288,18 +309,29 @@ export default function PoolsManager({ competition, participants, setParticipant
               doc.line(lineX, midY, lineX - horizontalGap, midY); // Horizontal connector to previous round
 
               if (round > 1) {
-                doc.line(lineX, y1, lineX + horizontalGap, y1);
-                doc.line(lineX, y2, lineX + horizontalGap, y2);
+                const p1 = participants[i];
+                const p2 = participants[i+1];
+                if(p1 && p1 !== 'BYE'){ doc.line(lineX, y1, lineX + horizontalGap, y1);}
+                if(p2 && p2 !== 'BYE'){ doc.line(lineX, y2, lineX + horizontalGap, y2);}
+                if( (p1 && p1 !== 'BYE') && (!p2 || p2 === 'BYE') ) { doc.line(lineX, y1, lineX - horizontalGap, y1) }
+                if( (p2 && p2 !== 'BYE') && (!p1 || p1 === 'BYE') ) { doc.line(lineX, y2, lineX - horizontalGap, y2) }
+
               } else {
-                 // Check if it's a bye
                  const p1 = participants[i];
                  const p2 = participants[i+1];
-                 if (p1 && p2) {
-                    doc.line(lineX, y1, lineX + horizontalGap, y1);
-                    doc.line(lineX, y2, lineX + horizontalGap, y2);
-                 } else if (p1 || p2) {
-                    const playerY = p1 ? y1 : y2;
-                    doc.line(lineX, playerY, lineX + horizontalGap, playerY);
+                 const player1LineY = y + i * (playerBoxHeight + verticalGap) + playerBoxHeight/2;
+                 const player2LineY = y + (i+1) * (playerBoxHeight + verticalGap) + playerBoxHeight/2;
+                 
+                 if (p1 && p1 !== 'BYE') {
+                    doc.line(x, player1LineY, x + horizontalGap, player1LineY);
+                 }
+                 if (p2 && p2 !== 'BYE') {
+                    doc.line(x, player2LineY, x + horizontalGap, player2LineY);
+                 }
+                 if ((p1 && p1 !== 'BYE') && (!p2 || p2 === 'BYE')) {
+                     const byeWinnerY = (player1LineY + player2LineY) / 2;
+                     doc.line(x, player1LineY, x, byeWinnerY);
+                     doc.line(x, byeWinnerY, x - horizontalGap, byeWinnerY);
                  }
               }
               
@@ -308,7 +340,7 @@ export default function PoolsManager({ competition, participants, setParticipant
           return connectionPoints;
       };
 
-      drawBracket(participantsWithByes, startX, startY, 1);
+      drawBracket(participantsWithByes.map(p=> p? p : 'BYE'), startX, startY, 1);
     });
   
     doc.save(`${competition.competition_name}_pools.pdf`);
