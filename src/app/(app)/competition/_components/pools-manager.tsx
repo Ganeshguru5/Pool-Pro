@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import { useState, useMemo } from 'react';
@@ -193,16 +192,17 @@ export default function PoolsManager({ competition, participants, setParticipant
       }
       
       const bracketSize = Math.pow(2, Math.ceil(Math.log2(numParticipants)));
-      const byes = bracketSize - numParticipants;
       
-      // Distribute byes
-      let players = [...poolParticipants];
-      let bracketSlots: (Participant | 'BYE')[] = new Array(bracketSize).fill('BYE');
-
       const distributePlayers = (slots: number, playersToPlace: Participant[]) => {
         const playerPositions: (Participant | 'BYE')[] = new Array(slots).fill('BYE');
         if (playersToPlace.length === 0) return playerPositions;
         
+        // Base case for recursion
+        if (playersToPlace.length === 1) {
+            playerPositions[0] = playersToPlace[0];
+            return playerPositions;
+        }
+
         const mid = Math.ceil(slots / 2);
         const topPlayers = playersToPlace.slice(0, Math.ceil(playersToPlace.length / 2));
         const bottomPlayers = playersToPlace.slice(Math.ceil(playersToPlace.length / 2));
@@ -213,7 +213,7 @@ export default function PoolsManager({ competition, participants, setParticipant
         return [...topPositions, ...bottomPositions];
       };
 
-      const finalPlayerOrder = distributePlayers(bracketSize, players);
+      const finalPlayerOrder = distributePlayers(bracketSize, poolParticipants);
 
       const playerBoxHeight = 8;
       const verticalGap = 2;
@@ -243,8 +243,15 @@ export default function PoolsManager({ competition, participants, setParticipant
               const participantName = p.name;
               doc.text(participantName, startX + 15, currentY + 1);
 
-              // Connect to first match
-              doc.line(startX + playerBoxWidth, currentY, startX + playerBoxWidth + horizontalGap / 2, currentY);
+          } else {
+            // Find the player in the pair that has a bye
+            const pairIndex = Math.floor(i / 2);
+            const playerInPair = finalPlayerOrder[pairIndex*2] !== 'BYE' ? finalPlayerOrder[pairIndex*2] : finalPlayerOrder[pairIndex*2+1];
+            if (playerInPair && typeof playerInPair !== 'string') {
+              const playerY = effectiveStartY + (pairIndex * 2 + (finalPlayerOrder[pairIndex*2] !== 'BYE' ? 0 : 1)) * (playerBoxHeight + verticalGap) + playerBoxHeight / 2;
+              const nextRoundY = (firstRoundYPositions[pairIndex*2] + firstRoundYPositions[pairIndex*2+1])/2;
+              doc.line(startX + playerBoxWidth, playerY, startX + playerBoxWidth + horizontalGap, nextRoundY);
+            }
           }
       });
       
@@ -375,3 +382,5 @@ export default function PoolsManager({ competition, participants, setParticipant
     </Card>
   );
 }
+
+    
