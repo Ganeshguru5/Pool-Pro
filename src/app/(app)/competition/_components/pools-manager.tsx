@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useMemo } from 'react';
@@ -162,7 +161,7 @@ export default function PoolsManager({ competition, participants, setParticipant
   
       doc.setFontSize(16);
       doc.setFont('helvetica', 'bold');
-      doc.text("Take won do", pageWidth / 2, 20, { align: 'center' }); // Matching image
+      doc.text("Take won do", pageWidth / 2, 20, { align: 'center' });
       
       doc.setFontSize(10);
       doc.setFont('helvetica', 'normal');
@@ -193,43 +192,48 @@ export default function PoolsManager({ competition, participants, setParticipant
       }
       
       const bracketSize = Math.pow(2, Math.ceil(Math.log2(numParticipants)));
-      
+      const numByes = bracketSize - numParticipants;
+
       const distributePlayers = (players: Participant[]) => {
-        const slots = Math.pow(2, Math.ceil(Math.log2(players.length)));
-        const playerPositions: (Participant | 'BYE')[] = new Array(slots).fill('BYE');
-        if (players.length === 0) return playerPositions;
-    
-        const seedOrder: number[] = [1];
-        for (let i = 1; i < Math.log2(slots); i++) {
-          const round = seedOrder.map(j => (2 ** (i + 1) + 1 - j));
-          seedOrder.push(...round.reverse());
-        }
-        
-        let playerIndex = 0;
-        seedOrder.forEach(seed => {
-            if (players[playerIndex]) {
-                playerPositions[seed - 1] = players[playerIndex];
-                playerIndex++;
-            }
-        });
-        
-        return playerPositions;
+          const slots = Math.pow(2, Math.ceil(Math.log2(players.length)));
+          const playerPositions: (Participant | 'BYE')[] = new Array(slots).fill('BYE');
+          
+          if (players.length === 0) return playerPositions;
+      
+          // Standard seeding order for a bracket
+          const seedOrder: number[] = [1];
+          for (let i = 1; i < Math.ceil(Math.log2(slots)); i++) {
+              const round = seedOrder.map(j => (2 ** (i + 1) + 1 - j));
+              seedOrder.push(...round.reverse());
+          }
+          
+          let playerIndex = 0;
+          seedOrder.forEach(seed => {
+              if (players[playerIndex]) {
+                  playerPositions[seed - 1] = players[playerIndex];
+                  playerIndex++;
+              }
+          });
+          
+          return playerPositions;
       };
 
       const finalPlayerOrder = distributePlayers(poolParticipants);
 
       const playerBoxHeight = 12;
       const verticalGap = 4;
-      const playerBoxWidth = 50;
+      const playerBoxWidth = 60;
       const horizontalGap = 20;
       const startX = 14;
-      let startY = yPos + 15;
+      let startY = yPos + 20;
 
       const totalHeight = bracketSize * (playerBoxHeight + verticalGap) - verticalGap;
       const pageHeight = doc.internal.pageSize.getHeight();
       
       if (startY + totalHeight > pageHeight - 20) {
-        startY = 20; // Adjust if bracket is too tall
+          startY = 20; // Adjust if bracket is too tall
+          doc.addPage();
+          yPos = 20;
       }
 
       // Recursive function to draw the bracket lines
@@ -278,7 +282,7 @@ export default function PoolsManager({ competition, participants, setParticipant
           
           if (p !== 'BYE') {
               doc.text(`${i + 1} ${p.district}`, startX + 2, boxY + 4);
-              doc.text(p.name, startX + 2, boxY + 8);
+              doc.text(p.name, startX + 2, boxY + 9);
 
               // Check for byes to draw connecting line directly to next round
               const pairIndex = Math.floor(i/2);
@@ -291,9 +295,8 @@ export default function PoolsManager({ competition, participants, setParticipant
                     doc.line(startX + playerBoxWidth + horizontalGap / 2, currentY, startX + playerBoxWidth + horizontalGap, nextRoundY);
                 }
               }
-
           } else {
-            doc.text('BYE', startX + 25, currentY + 1, { align: 'center'});
+            doc.text('BYE', startX + playerBoxWidth/2, currentY + 2, { align: 'center'});
           }
       });
       
