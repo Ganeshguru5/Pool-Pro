@@ -196,7 +196,7 @@ export default function PoolsManager({ competition, participants, setParticipant
       const bracketSize = Math.pow(2, Math.ceil(Math.log2(numParticipants)));
       const byes = bracketSize - numParticipants;
   
-      const playerBoxHeight = 8;
+      const playerBoxHeight = 10; // Increased height
       const verticalGap = 4;
       const playerBoxWidth = 60;
       const horizontalGap = 15;
@@ -218,8 +218,9 @@ export default function PoolsManager({ competition, participants, setParticipant
         if(participant) {
             doc.setFontSize(8);
             doc.rect(startX, y - playerBoxHeight/2, playerBoxWidth, playerBoxHeight);
-            doc.text(`${participant.district}`, startX + 2, y + 1);
-            doc.text(participant.name, startX + 15, y + 1);
+            // Draw district on top and name on bottom to prevent overlap
+            doc.text(`${participant.district}`, startX + 2, y - 1);
+            doc.text(participant.name, startX + 2, y + 3);
         }
         firstRoundPositions.push({ x: startX + playerBoxWidth, y, p: participant });
       }
