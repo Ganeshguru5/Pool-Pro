@@ -175,7 +175,7 @@ export default function PoolsManager({ competition, participants, setParticipant
       doc.setFont('helvetica', 'bold');
       doc.text(poolName, pageWidth / 2, 48, { align: 'center' });
       
-      let yPos = 60;
+      let yPos = 55;
       doc.setFontSize(12);
       doc.setFont('helvetica', 'bold');
       doc.text(`${ageCategoryName} - ${weightCategoryName}`, 14, yPos);
@@ -183,131 +183,93 @@ export default function PoolsManager({ competition, participants, setParticipant
         doc.setFontSize(8);
         doc.text(weightCategoryDescription, 14, yPos + 4);
       }
-      yPos += 15;
-  
+      
       // --- Bracket Logic ---
       const numParticipants = poolParticipants.length;
       if (numParticipants < 2) {
-        doc.text("Not enough participants to create a bracket.", 14, yPos);
+        doc.text("Not enough participants to create a bracket.", 14, yPos + 15);
         return;
       }
       
       const bracketSize = Math.pow(2, Math.ceil(Math.log2(numParticipants)));
       const byes = bracketSize - numParticipants;
-  
+      
       const playerBoxHeight = 10;
-      const verticalGap = 4; // Reduced from 8 to 4
+      const verticalGap = 5; 
       const playerBoxWidth = 60;
       const horizontalGap = 15;
       const startX = 14;
-      let startY = yPos;
+      const startY = yPos + 15;
   
-      let pIndex = 0;
-      const firstRoundPositions: {x: number, y:number, p: Participant | null}[] = [];
+      let participantIndex = 0;
+      let slots = new Array(bracketSize).fill(null).map(() => ({ participant: null, x: 0, y: 0 }));
   
-      const distributedByes = new Array(bracketSize).fill(false);
-      let byesToPlace = byes;
-      if (byes > 0) {
-        // Distribute byes somewhat evenly
-        const byePattern = [0, bracketSize-1, Math.floor(bracketSize/2), Math.floor(bracketSize/2)-1];
-        let byeIdx = 0;
-        while(byesToPlace > 0) {
-            const pos = byePattern[byeIdx % 4] ?? byeIdx;
-            if(!distributedByes[pos]) {
-                distributedByes[pos] = true;
-                byesToPlace--;
-            }
-            byeIdx++;
-        }
-      }
-
-      for (let i = 0; i < bracketSize; i++) {
-        const y = startY + i * (playerBoxHeight + verticalGap);
-        let participant = null;
-        if (distributedByes[i]) {
-           participant = null; // This is a bye
-        } else {
-           participant = poolParticipants[pIndex++];
-        }
-
-        if(participant) {
-            doc.setFontSize(8);
-            doc.rect(startX, y, playerBoxWidth, playerBoxHeight);
-            doc.text(`${participant.district}`, startX + 2, y + 4);
-            doc.text(participant.name, startX + 2, y + 8);
-        }
-        firstRoundPositions.push({ x: startX + playerBoxWidth, y: y + playerBoxHeight / 2, p: participant });
-      }
-
-      function drawBracket(positions: { x: number, y: number }[]) {
-        if (positions.length < 2) {
-            if(positions.length === 1) {
-                // Draw final winner line
-                const pos = positions[0];
-                doc.line(pos.x, pos.y, pos.x + horizontalGap, pos.y);
-            }
-            return;
-        }
-
-        const currentX = positions[0].x;
-        const nextX = currentX + horizontalGap;
-        const nextRoundPositions = [];
-
-        for (let i = 0; i < positions.length; i += 2) {
-            const pos1 = positions[i];
-            const pos2 = positions[i + 1];
-
-            if (!pos2) { // Should not happen with power-of-2 logic, but safety first
-                doc.line(pos1.x, pos1.y, nextX, pos1.y);
-                nextRoundPositions.push({ x: nextX, y: pos1.y });
-                continue;
-            }
-
-            doc.line(pos1.x, pos1.y, nextX, pos1.y);
-            doc.line(pos2.x, pos2.y, nextX, pos2.y);
-            doc.line(nextX, pos1.y, nextX, pos2.y);
-    
-            const midY = (pos1.y + pos2.y) / 2;
-            nextRoundPositions.push({ x: nextX, y: midY });
-        }
-        
-        drawBracket(nextRoundPositions);
+      // Distribute participants and byes
+      let p_indices = Array.from(Array(numParticipants).keys());
+      let slots_indices = Array.from(Array(bracketSize).keys());
+      
+      let p_i = 0;
+      while (p_i < numParticipants) {
+          slots[slots_indices.shift()!].participant = poolParticipants[p_i];
+          p_i++;
       }
       
-      const initialRoundToDraw = [];
-      const nextRoundPositions = [];
-
-      for(let i = 0; i < firstRoundPositions.length; i += 2) {
-          const matchUp1 = firstRoundPositions[i];
-          const matchUp2 = firstRoundPositions[i+1];
-
-          if(matchUp1.p && matchUp2.p) { // Normal match
-              initialRoundToDraw.push({x: matchUp1.x, y: matchUp1.y});
-              initialRoundToDraw.push({x: matchUp2.x, y: matchUp2.y});
-          } else { // One of them is a bye
-              const realPlayerMatchup = matchUp1.p ? matchUp1 : matchUp2;
-              const midY = (matchUp1.y + matchUp2.y) / 2;
-              doc.line(realPlayerMatchup.x, realPlayerMatchup.y, realPlayerMatchup.x + horizontalGap, realPlayerMatchup.y);
-              nextRoundPositions.push({ x: realPlayerMatchup.x + horizontalGap, y: midY });
+      let round = 1;
+      let currentSlots = slots;
+  
+      while(currentSlots.length > 1){
+          const nextSlots = [];
+          for (let i = 0; i < currentSlots.length; i += 2) {
+              const slot1 = currentSlots[i];
+              const slot2 = currentSlots[i + 1];
+  
+              if(round === 1) {
+                  slot1.y = startY + i * (playerBoxHeight + verticalGap);
+                  slot2.y = startY + (i + 1) * (playerBoxHeight + verticalGap);
+                  slot1.x = startX;
+                  slot2.x = startX;
+                  
+                  doc.setFontSize(8);
+                  if (slot1.participant) {
+                      doc.rect(slot1.x, slot1.y, playerBoxWidth, playerBoxHeight);
+                      doc.text(slot1.participant.district, slot1.x + 2, slot1.y + 4);
+                      doc.text(slot1.participant.name, slot1.x + 2, slot1.y + 8);
+                  }
+                  if (slot2.participant) {
+                      doc.rect(slot2.x, slot2.y, playerBoxWidth, playerBoxHeight);
+                      doc.text(slot2.participant.district, slot2.x + 2, slot2.y + 4);
+                      doc.text(slot2.participant.name, slot2.x + 2, slot2.y + 8);
+                  }
+              }
+  
+              const nextX = slot1.x + playerBoxWidth + (round-1)*horizontalGap;
+              const midY = (slot1.y + slot2.y) / 2;
+  
+              if (slot1.participant && slot2.participant) {
+                  // Standard match
+                  doc.line(nextX, slot1.y + playerBoxHeight / 2, nextX + horizontalGap, slot1.y + playerBoxHeight / 2);
+                  doc.line(nextX, slot2.y + playerBoxHeight / 2, nextX + horizontalGap, slot2.y + playerBoxHeight / 2);
+                  doc.line(nextX + horizontalGap, slot1.y + playerBoxHeight / 2, nextX + horizontalGap, slot2.y + playerBoxHeight / 2);
+                  nextSlots.push({ participant: 'winner', x: nextX, y: midY });
+              } else if (slot1.participant || slot2.participant) {
+                  // Bye
+                  const playerSlot = slot1.participant ? slot1 : slot2;
+                  doc.line(nextX, playerSlot.y + playerBoxHeight / 2, nextX + horizontalGap, playerSlot.y + playerBoxHeight / 2);
+                  nextSlots.push({ participant: 'winner', x: nextX, y: playerSlot.y + playerBoxHeight/2 });
+              } else {
+                  // Both are byes or empty slots
+                  nextSlots.push({ participant: null, x: nextX, y: midY });
+              }
           }
+          currentSlots = nextSlots;
+          round++;
       }
-
-      const firstRoundWinners = [];
-       for (let i = 0; i < initialRoundToDraw.length; i += 2) {
-        const pos1 = initialRoundToDraw[i];
-        const pos2 = initialRoundToDraw[i + 1];
-
-        const nextX = pos1.x + horizontalGap;
-        doc.line(nextX, pos1.y, nextX, pos2.y);
-        doc.line(pos1.x, pos1.y, nextX, pos1.y);
-        doc.line(pos2.x, pos2.y, nextX, pos2.y);
-        
-        const midY = (pos1.y + pos2.y) / 2;
-        firstRoundWinners.push({ x: nextX, y: midY });
+      // Final winner line
+      if (currentSlots.length === 1) {
+        const lastSlot = currentSlots[0];
+        const finalX = lastSlot.x + playerBoxWidth + (round-2)*horizontalGap + horizontalGap;
+        doc.line(finalX, lastSlot.y, finalX + horizontalGap, lastSlot.y);
       }
-
-      const allNextRoundParticipants = [...firstRoundWinners, ...nextRoundPositions].sort((a,b) => a.y - b.y);
-      drawBracket(allNextRoundParticipants);
     });
   
     doc.save(`${competition.competition_name}_pools.pdf`);
