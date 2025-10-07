@@ -162,7 +162,7 @@ export default function PoolsManager({ competition, participants, setParticipant
   
       doc.setFontSize(16);
       doc.setFont('helvetica', 'bold');
-      doc.text(competition.competition_name, pageWidth / 2, 20, { align: 'center' });
+      doc.text("Take won do", pageWidth / 2, 20, { align: 'center' }); // Matching image
       
       doc.setFontSize(10);
       doc.setFont('helvetica', 'normal');
@@ -176,13 +176,14 @@ export default function PoolsManager({ competition, participants, setParticipant
       doc.setFont('helvetica', 'bold');
       doc.text(poolName, pageWidth / 2, 48, { align: 'center' });
       
-      let yPos = 55;
+      let yPos = 60;
       doc.setFontSize(12);
       doc.setFont('helvetica', 'bold');
       doc.text(`${ageCategoryName} - ${weightCategoryName}`, 14, yPos);
       if (weightCategoryDescription) {
-        doc.setFontSize(8);
-        doc.text(weightCategoryDescription, 14, yPos + 4);
+        doc.setFontSize(10);
+        doc.setFont('helvetica', 'normal');
+        doc.text(`Weight: ${weightCategoryDescription}`, 14, yPos + 5);
       }
       
       const numParticipants = poolParticipants.length;
@@ -198,7 +199,7 @@ export default function PoolsManager({ competition, participants, setParticipant
         const playerPositions: (Participant | 'BYE')[] = new Array(slots).fill('BYE');
         if (players.length === 0) return playerPositions;
     
-        const seedOrder = [1];
+        const seedOrder: number[] = [1];
         for (let i = 1; i < Math.log2(slots); i++) {
           const round = seedOrder.map(j => (2 ** (i + 1) + 1 - j));
           seedOrder.push(...round.reverse());
@@ -217,9 +218,9 @@ export default function PoolsManager({ competition, participants, setParticipant
 
       const finalPlayerOrder = distributePlayers(poolParticipants);
 
-      const playerBoxHeight = 10;
+      const playerBoxHeight = 12;
       const verticalGap = 4;
-      const playerBoxWidth = 70;
+      const playerBoxWidth = 50;
       const horizontalGap = 20;
       const startX = 14;
       let startY = yPos + 15;
@@ -231,19 +232,20 @@ export default function PoolsManager({ competition, participants, setParticipant
         startY = 20; // Adjust if bracket is too tall
       }
 
+      // Recursive function to draw the bracket lines
       const drawBracket = (positions: number[], roundNum: number) => {
         if (positions.length <= 1) {
             // Draw winner line
              if (positions.length === 1) {
-                const winnerX = startX + playerBoxWidth + (horizontalGap / 2) * (2 * roundNum - 1);
+                const winnerX = startX + playerBoxWidth + (roundNum - 1) * horizontalGap;
                 const winnerY = positions[0];
-                doc.line(winnerX, winnerY, winnerX + horizontalGap, winnerY);
+                doc.line(winnerX, winnerY, winnerX + horizontalGap / 2, winnerY);
             }
             return;
         }
     
         const nextRoundPositions: number[] = [];
-        const currentX = startX + playerBoxWidth + (horizontalGap / 2) * (2 * roundNum - 1);
+        const currentX = startX + playerBoxWidth + (roundNum - 1) * horizontalGap;
     
         for (let i = 0; i < positions.length; i += 2) {
             const y1 = positions[i];
@@ -270,35 +272,32 @@ export default function PoolsManager({ competition, participants, setParticipant
 
           const boxY = currentY - playerBoxHeight / 2;
           doc.rect(startX, boxY, playerBoxWidth, playerBoxHeight);
+          doc.line(startX + playerBoxWidth, currentY, startX + playerBoxWidth + horizontalGap / 2, currentY);
+
           doc.setFontSize(8);
           
           if (p !== 'BYE') {
-              const districtText = `${i + 1} ${p.district}`;
-              doc.text(districtText, startX + 2, boxY + 4);
-              
-              const participantName = p.name;
-              doc.text(participantName, startX + 2, boxY + 8);
+              doc.text(`${i + 1} ${p.district}`, startX + 2, boxY + 4);
+              doc.text(p.name, startX + 2, boxY + 8);
 
-              // Check for byes to draw connecting line
+              // Check for byes to draw connecting line directly to next round
               const pairIndex = Math.floor(i/2);
               const otherInPair = i % 2 === 0 ? finalPlayerOrder[i+1] : finalPlayerOrder[i-1];
               if (otherInPair === 'BYE') {
-                  const p1_y = firstRoundYPositions[pairIndex*2];
-                  const p2_y = firstRoundYPositions[pairIndex*2+1];
-                  // Check if both y positions are valid numbers
-                  if (p1_y && p2_y) {
+                const p1_y = firstRoundYPositions[pairIndex*2];
+                const p2_y = firstRoundYPositions[pairIndex*2+1];
+                if (typeof p1_y === 'number' && typeof p2_y === 'number') {
                     const nextRoundY = (p1_y + p2_y) / 2;
-                    doc.line(startX + playerBoxWidth, currentY, startX + playerBoxWidth + horizontalGap, nextRoundY);
-                  } else if (p1_y) { // Case for last player with a bye
-                    doc.line(startX + playerBoxWidth, currentY, startX + playerBoxWidth + horizontalGap, currentY);
-                  }
+                    doc.line(startX + playerBoxWidth + horizontalGap / 2, currentY, startX + playerBoxWidth + horizontalGap, nextRoundY);
+                }
               }
 
           } else {
-            doc.text('BYE', startX + 2, currentY + 1);
+            doc.text('BYE', startX + 25, currentY + 1, { align: 'center'});
           }
       });
       
+      // Draw the rest of the bracket recursively
       drawBracket(firstRoundYPositions, 1);
     });
   
@@ -404,3 +403,5 @@ export default function PoolsManager({ competition, participants, setParticipant
     </Card>
   );
 }
+
+    
