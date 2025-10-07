@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useMemo } from 'react';
@@ -194,82 +195,120 @@ export default function PoolsManager({ competition, participants, setParticipant
       const bracketSize = Math.pow(2, Math.ceil(Math.log2(numParticipants)));
       const byes = bracketSize - numParticipants;
       
-      const playerBoxHeight = 10;
-      const verticalGap = 5; 
-      const playerBoxWidth = 60;
-      const horizontalGap = 15;
-      const startX = 14;
-      const startY = yPos + 15;
-  
-      let participantIndex = 0;
-      let slots = new Array(bracketSize).fill(null).map(() => ({ participant: null, x: 0, y: 0 }));
-  
-      // Distribute participants and byes
-      let p_indices = Array.from(Array(numParticipants).keys());
-      let slots_indices = Array.from(Array(bracketSize).keys());
-      
-      let p_i = 0;
-      while (p_i < numParticipants) {
-          slots[slots_indices.shift()!].participant = poolParticipants[p_i];
-          p_i++;
-      }
-      
-      let round = 1;
-      let currentSlots = slots;
-  
-      while(currentSlots.length > 1){
-          const nextSlots = [];
-          for (let i = 0; i < currentSlots.length; i += 2) {
-              const slot1 = currentSlots[i];
-              const slot2 = currentSlots[i + 1];
-  
-              if(round === 1) {
-                  slot1.y = startY + i * (playerBoxHeight + verticalGap);
-                  slot2.y = startY + (i + 1) * (playerBoxHeight + verticalGap);
-                  slot1.x = startX;
-                  slot2.x = startX;
-                  
-                  doc.setFontSize(8);
-                  if (slot1.participant) {
-                      doc.rect(slot1.x, slot1.y, playerBoxWidth, playerBoxHeight);
-                      doc.text(slot1.participant.district, slot1.x + 2, slot1.y + 4);
-                      doc.text(slot1.participant.name, slot1.x + 2, slot1.y + 8);
-                  }
-                  if (slot2.participant) {
-                      doc.rect(slot2.x, slot2.y, playerBoxWidth, playerBoxHeight);
-                      doc.text(slot2.participant.district, slot2.x + 2, slot2.y + 4);
-                      doc.text(slot2.participant.name, slot2.x + 2, slot2.y + 8);
-                  }
-              }
-  
-              const nextX = slot1.x + playerBoxWidth + (round-1)*horizontalGap;
-              const midY = (slot1.y + slot2.y) / 2;
-  
-              if (slot1.participant && slot2.participant) {
-                  // Standard match
-                  doc.line(nextX, slot1.y + playerBoxHeight / 2, nextX + horizontalGap, slot1.y + playerBoxHeight / 2);
-                  doc.line(nextX, slot2.y + playerBoxHeight / 2, nextX + horizontalGap, slot2.y + playerBoxHeight / 2);
-                  doc.line(nextX + horizontalGap, slot1.y + playerBoxHeight / 2, nextX + horizontalGap, slot2.y + playerBoxHeight / 2);
-                  nextSlots.push({ participant: 'winner', x: nextX, y: midY });
-              } else if (slot1.participant || slot2.participant) {
-                  // Bye
-                  const playerSlot = slot1.participant ? slot1 : slot2;
-                  doc.line(nextX, playerSlot.y + playerBoxHeight / 2, nextX + horizontalGap, playerSlot.y + playerBoxHeight / 2);
-                  nextSlots.push({ participant: 'winner', x: nextX, y: playerSlot.y + playerBoxHeight/2 });
+      // Distribute participants and byes strategically
+      let participantsWithByes = [];
+      if (byes > 0) {
+          const halfBracket = Math.ceil(bracketSize / 2);
+          let p_idx = 0;
+          for(let i=0; i<bracketSize; i++) {
+              // This is a simple distribution, for real tournaments look up seeding algorithms
+              if (i % 2 === 1 && (byes - (i - p_idx)) > 0) {
+                  participantsWithByes.push(null); // bye
+              } else if (p_idx < numParticipants) {
+                  participantsWithByes.push(poolParticipants[p_idx]);
+                  p_idx++;
               } else {
-                  // Both are byes or empty slots
-                  nextSlots.push({ participant: null, x: nextX, y: midY });
+                   participantsWithByes.push(null); // bye
               }
           }
-          currentSlots = nextSlots;
-          round++;
+          // A better bye distribution
+          const p_copy = [...poolParticipants];
+          participantsWithByes = new Array(bracketSize).fill(null);
+          let indices = [0, bracketSize-1, bracketSize/2, bracketSize/2 - 1];
+          let p_i = 0;
+          while(p_i < numParticipants){
+            let idx = indices.shift();
+            if(idx !== undefined && participantsWithByes[idx] === null) {
+                participantsWithByes[idx] = p_copy.shift();
+                p_i++;
+            } else {
+                let empty_idx = participantsWithByes.findIndex(p => p===null);
+                if(empty_idx !== -1) {
+                    participantsWithByes[empty_idx] = p_copy.shift();
+                    p_i++;
+                } else {
+                    break; // Should not happen
+                }
+            }
+          }
+      } else {
+        participantsWithByes = poolParticipants;
       }
-      // Final winner line
-      if (currentSlots.length === 1) {
-        const lastSlot = currentSlots[0];
-        const finalX = lastSlot.x + playerBoxWidth + (round-2)*horizontalGap + horizontalGap;
-        doc.line(finalX, lastSlot.y, finalX + horizontalGap, lastSlot.y);
-      }
+
+
+      const playerBoxHeight = 12;
+      const verticalGap = 8; 
+      const playerBoxWidth = 60;
+      const horizontalGap = 20;
+      const startX = 14;
+      const startY = yPos + 15;
+
+      const drawBracket = (participants: (Participant | null)[], x: number, y: number, round: number): number[] => {
+          if (participants.length <= 1) {
+              if (participants[0]) { // Draw final line for winner
+                  doc.line(x, y + playerBoxHeight / 2, x + horizontalGap, y + playerBoxHeight / 2);
+              }
+              return [y + playerBoxHeight / 2];
+          }
+
+          const mid = Math.ceil(participants.length / 2);
+          const topHalf = participants.slice(0, mid);
+          const bottomHalf = participants.slice(mid);
+
+          const topYPositions = drawBracket(topHalf, x + horizontalGap, y, round + 1);
+          
+          const yOffsetForBottom = topYPositions.length * (playerBoxHeight + verticalGap) * Math.pow(2, round - 1);
+          const bottomYPositions = drawBracket(bottomHalf, x + horizontalGap, y + yOffsetForBottom, round + 1);
+
+          const allYPositions = [...topYPositions, ...bottomYPositions];
+
+          if (round === 1) {
+              participants.forEach((p, i) => {
+                  const currentY = y + i * (playerBoxHeight + verticalGap);
+                  if (p) {
+                      doc.rect(x, currentY, playerBoxWidth, playerBoxHeight);
+                      doc.setFontSize(7);
+                      doc.text(p.district, x + 2, currentY + 4);
+                      doc.setFontSize(9);
+                      doc.text(p.name, x + 2, currentY + 9);
+                  }
+                  allYPositions[i] = currentY; // Store initial positions
+              });
+          }
+
+          let connectionPoints = [];
+          for (let i = 0; i < allYPositions.length; i += 2) {
+              const y1 = allYPositions[i] + (round > 1 ? 0 : playerBoxHeight / 2);
+              const y2 = allYPositions[i + 1] + (round > 1 ? 0 : playerBoxHeight / 2);
+
+              const lineX = x;
+              doc.line(lineX, y1, lineX, y2); // Vertical connector
+              
+              const midY = (y1 + y2) / 2;
+              doc.line(lineX, midY, lineX - horizontalGap, midY); // Horizontal connector to previous round
+
+              if (round > 1) {
+                doc.line(lineX, y1, lineX + horizontalGap, y1);
+                doc.line(lineX, y2, lineX + horizontalGap, y2);
+              } else {
+                 // Check if it's a bye
+                 const p1 = participants[i];
+                 const p2 = participants[i+1];
+                 if (p1 && p2) {
+                    doc.line(lineX, y1, lineX + horizontalGap, y1);
+                    doc.line(lineX, y2, lineX + horizontalGap, y2);
+                 } else if (p1 || p2) {
+                    const playerY = p1 ? y1 : y2;
+                    doc.line(lineX, playerY, lineX + horizontalGap, playerY);
+                 }
+              }
+              
+              connectionPoints.push(midY);
+          }
+          return connectionPoints;
+      };
+
+      drawBracket(participantsWithByes, startX, startY, 1);
     });
   
     doc.save(`${competition.competition_name}_pools.pdf`);
