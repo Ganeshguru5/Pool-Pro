@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useMemo } from 'react';
@@ -196,7 +195,7 @@ export default function PoolsManager({ competition, participants, setParticipant
       const bracketSize = Math.pow(2, Math.ceil(Math.log2(numParticipants)));
       const byes = bracketSize - numParticipants;
   
-      const playerBoxHeight = 10; // Increased height
+      const playerBoxHeight = 10;
       const verticalGap = 4;
       const playerBoxWidth = 60;
       const horizontalGap = 15;
@@ -206,10 +205,19 @@ export default function PoolsManager({ competition, participants, setParticipant
       let pIndex = 0;
       const firstRoundPositions: {x: number, y:number, p: Participant | null}[] = [];
   
+      // Distribute byes
+      const distributedByes = new Array(bracketSize).fill(false);
+      let byesToPlace = byes;
+      if (byes > 0) {
+        // Simple top/bottom placement for now
+        for (let i = 0; i < Math.floor(byes / 2); i++) distributedByes[i] = true;
+        for (let i = 0; i < Math.ceil(byes / 2); i++) distributedByes[bracketSize - 1 - i] = true;
+      }
+
       for (let i = 0; i < bracketSize; i++) {
-        const y = startY + i * (playerBoxHeight + verticalGap);
+        const y = startY + i * (playerBoxHeight + verticalGap) + (playerBoxHeight/2);
         let participant = null;
-        if (i < byes) {
+        if (distributedByes[i]) {
            participant = null; // This is a bye
         } else {
            participant = poolParticipants[pIndex++];
@@ -218,93 +226,79 @@ export default function PoolsManager({ competition, participants, setParticipant
         if(participant) {
             doc.setFontSize(8);
             doc.rect(startX, y - playerBoxHeight/2, playerBoxWidth, playerBoxHeight);
-            // Draw district on top and name on bottom to prevent overlap
             doc.text(`${participant.district}`, startX + 2, y - 1);
             doc.text(participant.name, startX + 2, y + 3);
         }
         firstRoundPositions.push({ x: startX + playerBoxWidth, y, p: participant });
       }
-  
-      function drawRound(positions: {x: number, y:number}[], roundNum: number) {
-        if (positions.length < 2) return;
-  
-        const nextRoundPositions = [];
+
+      function drawBracket(positions: { x: number, y: number }[]) {
+        if (positions.length < 1) return;
+
         const currentX = positions[0].x;
         const nextX = currentX + horizontalGap;
-  
+
+        // Draw final tail if this is the winner
+        if (positions.length === 1) {
+            const pos = positions[0];
+            doc.line(pos.x, pos.y, pos.x + horizontalGap, pos.y);
+            return;
+        }
+
+        const nextRoundPositions = [];
         for (let i = 0; i < positions.length; i += 2) {
-          const pos1 = positions[i];
-          const pos2 = positions[i + 1];
-  
-          // Draw horizontal lines from player boxes
-          doc.line(pos1.x, pos1.y, nextX, pos1.y);
-          doc.line(pos2.x, pos2.y, nextX, pos2.y);
-  
-          // Draw vertical connecting line
-          doc.line(nextX, pos1.y, nextX, pos2.y);
-  
-          const midY = (pos1.y + pos2.y) / 2;
-          nextRoundPositions.push({ x: nextX, y: midY });
+            const pos1 = positions[i];
+            const pos2 = positions[i + 1];
+
+            // This should not happen, but safeguard for odd numbers in later rounds
+            if (!pos2) {
+                doc.line(pos1.x, pos1.y, nextX, pos1.y); // Draw straight line for bye
+                nextRoundPositions.push({ x: nextX, y: pos1.y });
+                continue;
+            }
+
+            // Draw horizontal lines from player boxes/previous connector
+            doc.line(pos1.x, pos1.y, nextX, pos1.y);
+            doc.line(pos2.x, pos2.y, nextX, pos2.y);
+    
+            // Draw vertical connecting line
+            doc.line(nextX, pos1.y, nextX, pos2.y);
+    
+            const midY = (pos1.y + pos2.y) / 2;
+            nextRoundPositions.push({ x: nextX, y: midY });
         }
         
-        drawRound(nextRoundPositions, roundNum + 1);
+        drawBracket(nextRoundPositions);
       }
 
-      // Filter out byes for drawing, they get a free pass to next round
-      const actualFirstRoundPositions = [];
-      let nextRoundFromByes = [];
+      const initialRoundToDraw = [];
+      const nextRoundPositions = [];
 
-      for(let i=0; i < firstRoundPositions.length; i+=2) {
-          const match1 = firstRoundPositions[i];
-          const match2 = firstRoundPositions[i+1];
-          if(match1.p && match2.p) { // Normal match
-            actualFirstRoundPositions.push(match1);
-            actualFirstRoundPositions.push(match2);
-          } else { // One of them is a bye
-            const realPlayer = match1.p ? match1 : match2;
-            const y = (match1.y + match2.y) / 2;
-            nextRoundFromByes.push({ x: realPlayer.x + horizontalGap, y: y, p: realPlayer.p });
-            // Draw line for player who got a bye
-            doc.line(realPlayer.x, realPlayer.y, realPlayer.x + horizontalGap, realPlayer.y);
+      // Process first round matches and byes
+      for(let i = 0; i < firstRoundPositions.length; i += 2) {
+          const matchUp1 = firstRoundPositions[i];
+          const matchUp2 = firstRoundPositions[i+1];
+
+          if(matchUp1.p && matchUp2.p) { // Normal match
+              initialRoundToDraw.push({x: matchUp1.x, y: matchUp1.y});
+              initialRoundToDraw.push({x: matchUp2.x, y: matchUp2.y});
+          } else { // One of them is a bye, advance the player
+              const realPlayerMatchup = matchUp1.p ? matchUp1 : matchUp2;
+              const midY = (matchUp1.y + matchUp2.y) / 2;
+              
+              // Draw line for player who got a bye
+              doc.line(realPlayerMatchup.x, realPlayerMatchup.y, realPlayerMatchup.x + horizontalGap, realPlayerMatchup.y);
+              
+              nextRoundPositions.push({ x: realPlayerMatchup.x + horizontalGap, y: midY });
           }
       }
 
-      function drawBracket(rounds: {x: number, y:number}[][]) {
-        if(rounds.length === 0 || rounds[0].length < 2) return;
-        
-        const currentRound = rounds[0];
-        const nextRoundPositions = [];
-        const currentX = currentRound[0].x;
-        const nextX = currentX + horizontalGap;
+      const firstRoundWinners = [];
+      // Draw first round and get winner positions
+       for (let i = 0; i < initialRoundToDraw.length; i += 2) {
+        const pos1 = initialRoundToDraw[i];
+        const pos2 = initialRoundToDraw[i + 1];
 
-        for(let i = 0; i < currentRound.length; i+=2) {
-            const pos1 = currentRound[i];
-            const pos2 = currentRound[i+1];
-            
-            // Draw horizontal line from the midpoint of the previous vertical connector
-            doc.line(pos1.x, pos1.y, nextX, pos1.y);
-            if(pos2) { // If there is a second participant to pair with
-               doc.line(pos2.x, pos2.y, nextX, pos2.y);
-               // Draw vertical connecting line
-               doc.line(nextX, pos1.y, nextX, pos2.y);
-               const midY = (pos1.y + pos2.y) / 2;
-               nextRoundPositions.push({ x: nextX, y: midY });
-            } else { // Winner of this branch
-                nextRoundPositions.push({ x: nextX, y: pos1.y });
-            }
-        }
-        rounds.shift();
-        if(nextRoundPositions.length > 0) {
-            rounds.unshift(nextRoundPositions);
-        }
-        drawBracket(rounds);
-      }
-
-      // Initial drawing for the first matches
-      const initialConnectors = [];
-      for (let i = 0; i < actualFirstRoundPositions.length; i += 2) {
-        const pos1 = actualFirstRoundPositions[i];
-        const pos2 = actualFirstRoundPositions[i + 1];
         const nextX = pos1.x + horizontalGap;
 
         doc.line(pos1.x, pos1.y, nextX, pos1.y);
@@ -312,11 +306,13 @@ export default function PoolsManager({ competition, participants, setParticipant
         doc.line(nextX, pos1.y, nextX, pos2.y);
         
         const midY = (pos1.y + pos2.y) / 2;
-        initialConnectors.push({ x: nextX, y: midY });
+        firstRoundWinners.push({ x: nextX, y: midY });
       }
 
-      const allRounds = [ ...initialConnectors, ...nextRoundFromByes ].sort((a,b) => a.y - b.y);
-      drawBracket([allRounds]);
+      // Combine winners from byes and first round matches, then sort by Y position and draw the rest of the bracket
+      const allNextRoundParticipants = [...firstRoundWinners, ...nextRoundPositions].sort((a,b) => a.y - b.y);
+
+      drawBracket(allNextRoundParticipants);
     });
   
     doc.save(`${competition.competition_name}_pools.pdf`);
