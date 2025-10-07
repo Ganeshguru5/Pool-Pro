@@ -151,84 +151,173 @@ export default function PoolsManager({ competition, participants, setParticipant
     const doc = new jsPDF();
     const pageWidth = doc.internal.pageSize.getWidth();
     const { ageCategoryName, weightCategoryName, weightCategoryDescription } = getCategoryInfo(competition.age_category, competition.weight_category);
-
+  
     pools.forEach(([poolName, poolParticipants], poolIndex) => {
-      if (poolName === 'unassigned' && poolParticipants.length === 0) return;
-      
-      const isFirstPageOfDoc = poolIndex === 0 || (poolIndex > 0 && pools[0][0] === 'unassigned' && pools[0][1].length === 0 && poolIndex === 1);
-
-      if (!isFirstPageOfDoc) {
+      if (poolName === 'unassigned' || poolParticipants.length === 0) return;
+  
+      if (poolIndex > 0 && !(pools[0][0] === 'unassigned' && pools[0][1].length === 0 && poolIndex === 1)) {
         doc.addPage();
       }
-
+  
+      // --- Header ---
       doc.setFontSize(16);
       doc.setFont('helvetica', 'bold');
       doc.text(competition.competition_name, pageWidth / 2, 20, { align: 'center' });
       
       doc.setFontSize(10);
       doc.setFont('helvetica', 'normal');
-      if (competition.competition_date && !isNaN(new Date(competition.competition_date).getTime())) {
-        doc.text(`Date: ${format(new Date(competition.competition_date), 'dd/MM/yyyy')}`, pageWidth / 2, 26, { align: 'center' });
+      if (competition.start_date && !isNaN(new Date(competition.start_date).getTime())) {
+        doc.text(`Date: ${format(new Date(competition.start_date), 'dd/MM/yyyy')}`, pageWidth / 2, 26, { align: 'center' });
       }
       doc.text(`Organized by: ${competition.organized_by}`, pageWidth / 2, 32, { align: 'center' });
       doc.text(competition.address, pageWidth / 2, 38, { align: 'center' });
-
-
+  
       doc.setFontSize(14);
       doc.setFont('helvetica', 'bold');
       doc.text(poolName, pageWidth / 2, 48, { align: 'center' });
-
       
       let yPos = 60;
-        if (yPos > 250) { // Add new page if content overflows
-          doc.addPage();
-          yPos = 20;
+      doc.setFontSize(12);
+      doc.setFont('helvetica', 'bold');
+      doc.text(`${ageCategoryName} - ${weightCategoryName}`, 14, yPos);
+      if (weightCategoryDescription) {
+        doc.setFontSize(8);
+        doc.text(weightCategoryDescription, 14, yPos + 4);
+      }
+      yPos += 15;
+  
+      // --- Bracket Logic ---
+      const numParticipants = poolParticipants.length;
+      if (numParticipants < 2) {
+        doc.text("Not enough participants to create a bracket.", 14, yPos);
+        return;
+      }
+      
+      const bracketSize = Math.pow(2, Math.ceil(Math.log2(numParticipants)));
+      const byes = bracketSize - numParticipants;
+  
+      const playerBoxHeight = 8;
+      const verticalGap = 4;
+      const playerBoxWidth = 60;
+      const horizontalGap = 15;
+      const startX = 14;
+      let startY = yPos;
+  
+      let pIndex = 0;
+      const firstRoundPositions: {x: number, y:number, p: Participant | null}[] = [];
+  
+      for (let i = 0; i < bracketSize; i++) {
+        const y = startY + i * (playerBoxHeight + verticalGap);
+        let participant = null;
+        if (i < byes) {
+           participant = null; // This is a bye
+        } else {
+           participant = poolParticipants[pIndex++];
+        }
+
+        if(participant) {
+            doc.setFontSize(8);
+            doc.rect(startX, y - playerBoxHeight/2, playerBoxWidth, playerBoxHeight);
+            doc.text(`${participant.district}`, startX + 2, y + 1);
+            doc.text(participant.name, startX + 15, y + 1);
+        }
+        firstRoundPositions.push({ x: startX + playerBoxWidth, y, p: participant });
+      }
+  
+      function drawRound(positions: {x: number, y:number}[], roundNum: number) {
+        if (positions.length < 2) return;
+  
+        const nextRoundPositions = [];
+        const currentX = positions[0].x;
+        const nextX = currentX + horizontalGap;
+  
+        for (let i = 0; i < positions.length; i += 2) {
+          const pos1 = positions[i];
+          const pos2 = positions[i + 1];
+  
+          // Draw horizontal lines from player boxes
+          doc.line(pos1.x, pos1.y, nextX, pos1.y);
+          doc.line(pos2.x, pos2.y, nextX, pos2.y);
+  
+          // Draw vertical connecting line
+          doc.line(nextX, pos1.y, nextX, pos2.y);
+  
+          const midY = (pos1.y + pos2.y) / 2;
+          nextRoundPositions.push({ x: nextX, y: midY });
         }
         
-        doc.setFontSize(12);
-        doc.setFont('helvetica', 'bold');
-        doc.text(`${ageCategoryName} - ${weightCategoryName}`, 14, yPos);
-        if (weightCategoryDescription) {
-          doc.setFontSize(8);
-          doc.text(weightCategoryDescription, 14, yPos + 4);
-        }
+        drawRound(nextRoundPositions, roundNum + 1);
+      }
 
-        yPos += 15;
+      // Filter out byes for drawing, they get a free pass to next round
+      const actualFirstRoundPositions = [];
+      let nextRoundFromByes = [];
 
-        // Simple bracket logic
-        let currentY = yPos;
-        
-        for (let i = 0; i < poolParticipants.length; i += 2) {
-          const participant1 = poolParticipants[i];
-          const participant2 = poolParticipants[i+1];
-
-          const p1y = currentY;
-          doc.rect(20, p1y - 4, 80, 8);
-          doc.text(`${participant1.district}`, 22, p1y);
-          doc.text(participant1.name, 45, p1y);
-          
-          if(participant2){
-            const p2y = currentY + 10;
-            doc.rect(20, p2y - 4, 80, 8);
-            doc.text(`${participant2.district}`, 22, p2y);
-            doc.text(participant2.name, 45, p2y);
-
-            // Connecting lines
-            const midY = (p1y + p2y) / 2;
-            doc.line(100, p1y, 110, p1y);
-            doc.line(100, p2y, 110, p2y);
-            doc.line(110, p1y, 110, p2y);
-            doc.line(110, midY, 120, midY);
-
-            currentY += 25; // Increase Y for next pair
-          } else {
-            // Handle solo participant (bye)
-              doc.line(100, p1y, 120, p1y);
-              currentY += 15;
+      for(let i=0; i < firstRoundPositions.length; i+=2) {
+          const match1 = firstRoundPositions[i];
+          const match2 = firstRoundPositions[i+1];
+          if(match1.p && match2.p) { // Normal match
+            actualFirstRoundPositions.push(match1);
+            actualFirstRoundPositions.push(match2);
+          } else { // One of them is a bye
+            const realPlayer = match1.p ? match1 : match2;
+            const y = (match1.y + match2.y) / 2;
+            nextRoundFromByes.push({ x: realPlayer.x + horizontalGap, y: y, p: realPlayer.p });
+            // Draw line for player who got a bye
+            doc.line(realPlayer.x, realPlayer.y, realPlayer.x + horizontalGap, realPlayer.y);
           }
-        }
-    });
+      }
 
+      function drawBracket(rounds: {x: number, y:number}[][]) {
+        if(rounds.length === 0 || rounds[0].length < 2) return;
+        
+        const currentRound = rounds[0];
+        const nextRoundPositions = [];
+        const currentX = currentRound[0].x;
+        const nextX = currentX + horizontalGap;
+
+        for(let i = 0; i < currentRound.length; i+=2) {
+            const pos1 = currentRound[i];
+            const pos2 = currentRound[i+1];
+            
+            // Draw horizontal line from the midpoint of the previous vertical connector
+            doc.line(pos1.x, pos1.y, nextX, pos1.y);
+            if(pos2) { // If there is a second participant to pair with
+               doc.line(pos2.x, pos2.y, nextX, pos2.y);
+               // Draw vertical connecting line
+               doc.line(nextX, pos1.y, nextX, pos2.y);
+               const midY = (pos1.y + pos2.y) / 2;
+               nextRoundPositions.push({ x: nextX, y: midY });
+            } else { // Winner of this branch
+                nextRoundPositions.push({ x: nextX, y: pos1.y });
+            }
+        }
+        rounds.shift();
+        if(nextRoundPositions.length > 0) {
+            rounds.unshift(nextRoundPositions);
+        }
+        drawBracket(rounds);
+      }
+
+      // Initial drawing for the first matches
+      const initialConnectors = [];
+      for (let i = 0; i < actualFirstRoundPositions.length; i += 2) {
+        const pos1 = actualFirstRoundPositions[i];
+        const pos2 = actualFirstRoundPositions[i + 1];
+        const nextX = pos1.x + horizontalGap;
+
+        doc.line(pos1.x, pos1.y, nextX, pos1.y);
+        doc.line(pos2.x, pos2.y, nextX, pos2.y);
+        doc.line(nextX, pos1.y, nextX, pos2.y);
+        
+        const midY = (pos1.y + pos2.y) / 2;
+        initialConnectors.push({ x: nextX, y: midY });
+      }
+
+      const allRounds = [ ...initialConnectors, ...nextRoundFromByes ].sort((a,b) => a.y - b.y);
+      drawBracket([allRounds]);
+    });
+  
     doc.save(`${competition.competition_name}_pools.pdf`);
   };
 
