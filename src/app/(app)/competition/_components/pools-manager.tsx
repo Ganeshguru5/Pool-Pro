@@ -162,7 +162,7 @@ export default function PoolsManager({ competition, participants, setParticipant
   
       doc.setFontSize(16);
       doc.setFont('helvetica', 'bold');
-      doc.text("Take won do", pageWidth / 2, 15, { align: 'center' });
+      doc.text(competition.competition_name, pageWidth / 2, 15, { align: 'center' });
       
       doc.setFontSize(10);
       doc.setFont('helvetica', 'normal');
@@ -193,35 +193,29 @@ export default function PoolsManager({ competition, participants, setParticipant
       }
       
       const bracketSize = Math.pow(2, Math.ceil(Math.log2(numParticipants)));
-      const byes = bracketSize - numParticipants;
       
-      const distributePlayers = () => {
-          const players = [...poolParticipants];
-          const finalOrder: (Participant | 'BYE')[] = new Array(bracketSize).fill('BYE');
-          
-          if (players.length === 0) return finalOrder;
+      const distributePlayers = (slots: number, playersToPlace: Participant[]): (Participant | 'BYE')[] => {
+        const playerPositions: (Participant | 'BYE')[] = new Array(slots).fill('BYE');
+        if (playersToPlace.length === 0) return playerPositions;
+        if (playersToPlace.length === 1) {
+            playerPositions[0] = playersToPlace[0];
+            return playerPositions;
+        }
+        
+        const mid = Math.ceil(slots / 2);
+        const topPlayers = playersToPlace.slice(0, Math.ceil(playersToPlace.length / 2));
+        const bottomPlayers = playersToPlace.slice(Math.ceil(playersToPlace.length / 2));
 
-          const seedOrder = [1];
-          for (let i = 1; i < Math.ceil(Math.log2(bracketSize)); i++) {
-              const round = seedOrder.map(j => (2 ** (i + 1) + 1 - j));
-              seedOrder.push(...round.reverse());
-          }
+        const topPositions = distributePlayers(mid, topPlayers);
+        const bottomPositions = distributePlayers(slots - mid, bottomPlayers);
 
-          let playerIndex = 0;
-          seedOrder.forEach(seed => {
-              if (players[playerIndex]) {
-                  finalOrder[seed - 1] = players[playerIndex];
-                  playerIndex++;
-              }
-          });
-          
-          return finalOrder;
+        return [...topPositions, ...bottomPositions];
       };
 
-      const finalPlayerOrder = distributePlayers();
+      const finalPlayerOrder = distributePlayers(bracketSize, [...poolParticipants]);
 
       const playerBoxHeight = 10;
-      const verticalGap = 4; // Reduced gap
+      const verticalGap = 4;
       const playerBoxWidth = 60;
       const horizontalGap = 20;
       const startX = 14;
@@ -246,7 +240,7 @@ export default function PoolsManager({ competition, participants, setParticipant
               const winnerX = startX + playerBoxWidth + (roundNum - 1) * (horizontalGap / 2);
               const winnerY = yCoords[0];
               if(winnerY) {
-                doc.line(winnerX, winnerY, winnerX + horizontalGap / 2, winnerY);
+                doc.line(winnerX, winnerY, winnerX + horizontalGap, winnerY);
               }
               return;
           }
@@ -258,13 +252,17 @@ export default function PoolsManager({ competition, participants, setParticipant
               const y1 = yCoords[i];
               const y2 = yCoords[i+1];
               
-              if(y1 === undefined || y2 === undefined) continue;
+              if(y1 === undefined) continue;
+
+              if (y2 === undefined) { // Handles a BYE
+                  doc.line(currentX, y1, currentX + horizontalGap / 2, y1);
+                  nextRoundYCoords.push(y1);
+                  continue;
+              }
 
               const midY = (y1 + y2) / 2;
       
-              // Vertical connector
               doc.line(currentX, y1, currentX, y2);
-              // Horizontal line to next match
               doc.line(currentX, midY, currentX + horizontalGap/2, midY);
       
               nextRoundYCoords.push(midY);
@@ -286,14 +284,13 @@ export default function PoolsManager({ competition, participants, setParticipant
               doc.text(text, startX + 2, lineY - 1);
               doc.text(p.name, startX + 2, lineY + 3);
           } else {
-              doc.text('BYE', startX + playerBoxWidth / 2, lineY + 2, { align: 'center'});
+            // Do not draw 'BYE' text
           }
 
           // Draw line out from box
           doc.line(startX + playerBoxWidth, lineY, startX + playerBoxWidth + horizontalGap / 2, lineY);
       });
 
-      // Start drawing the bracket connections from round 2 onwards
       drawBracket(2, firstRoundYPositions);
 
     });
