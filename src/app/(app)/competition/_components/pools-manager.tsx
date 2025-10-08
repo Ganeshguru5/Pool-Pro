@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useMemo } from 'react';
@@ -195,92 +196,96 @@ export default function PoolsManager({ competition, participants, setParticipant
             doc.text("Not enough participants for a bracket.", 14, yPos);
             return;
         }
-
+        
         const bracketSize = Math.pow(2, Math.ceil(Math.log2(numParticipants)));
-        const byes = bracketSize - numParticipants;
 
-        const seededParticipants: (Participant | 'BYE')[] = [...poolParticipants, ...Array(byes).fill('BYE')];
-        
-        // Seeding logic to distribute players
-        const distribute = (players: (Participant | 'BYE')[]): (Participant | 'BYE')[] => {
-            if (players.length <= 2) {
-                return players;
-            }
-            const top = [];
-            const bottom = [];
-            for (let i = 0; i < players.length; i++) {
-                if (i % 2 === 0) {
-                    top.push(players[i]);
-                } else {
-                    bottom.push(players[i]);
-                }
-            }
-            return [...distribute(top), ...distribute(bottom)];
-        }
-        
-        const finalPlayerOrder = distribute(seededParticipants);
+        const seedOrder = (n: number) => {
+            if (n === 1) return [1];
+            const top = seedOrder(n / 2);
+            const bottom = seedOrder(n / 2).map(i => n - i + 1).reverse();
+            return [...top, ...bottom];
+        };
 
-        const playerBoxHeight = 12;
+        const distributePlayers = (players: Participant[]): (Participant | 'BYE')[] => {
+            const finalSlots = new Array(bracketSize).fill('BYE');
+            const seeds = seedOrder(bracketSize);
+            
+            players.forEach((player, index) => {
+                const pos = seeds[index] - 1;
+                finalSlots[pos] = player;
+            });
+
+            return finalSlots;
+        };
+
+        const finalPlayerOrder = distributePlayers(poolParticipants);
+
+        const playerBoxHeight = 10;
         const verticalGap = 4;
         const playerBoxWidth = 60;
         const horizontalGap = 20;
         const startX = 14;
-        const totalBracketHeight = bracketSize * (playerBoxHeight + verticalGap);
-        
-        if (yPos + totalBracketHeight > pageHeight - 10) {
-          yPos = 15; // Reset for new page if it overflows
+        let startY = yPos;
+
+        const totalBracketHeight = bracketSize * (playerBoxHeight + verticalGap) - verticalGap;
+        if (startY + totalBracketHeight > pageHeight - 10) {
+            startY = 15; // Reset for new page if it overflows
         }
-        
-        let roundYs: number[] = [];
-        // Draw first round participants
+
+        let roundPositions: {x: number, y: number}[] = [];
+
+        // Draw first round
         for (let i = 0; i < bracketSize; i++) {
             const player = finalPlayerOrder[i];
-            const boxY = yPos + i * (playerBoxHeight + verticalGap);
+            const boxY = startY + i * (playerBoxHeight + verticalGap);
             const lineY = boxY + playerBoxHeight / 2;
+            roundPositions.push({ x: startX, y: lineY });
             
-            roundYs.push(lineY);
-
             doc.rect(startX, boxY, playerBoxWidth, playerBoxHeight);
 
             if (player !== 'BYE') {
                 doc.setFontSize(8);
-                doc.text(`${i + 1} ${player.district}`, startX + 2, boxY + 4);
-                doc.text(player.name, startX + 2, boxY + 8);
+                const playerText = `${i + 1} ${player.district} ${player.name}`;
+                doc.text(playerText, startX + 2, lineY + 1, {
+                    maxWidth: playerBoxWidth - 4,
+                    lineHeightFactor: 1,
+                });
             }
-            // Horizontal line from box
-            doc.line(startX + playerBoxWidth, lineY, startX + playerBoxWidth + horizontalGap / 2, lineY);
         }
 
         // Draw subsequent rounds
         let round = 1;
-        let currentX = startX + playerBoxWidth + horizontalGap / 2;
+        let currentX = startX + playerBoxWidth;
 
-        while (roundYs.length > 1) {
-            const nextRoundYs: number[] = [];
-            for (let i = 0; i < roundYs.length; i += 2) {
-                const y1 = roundYs[i];
-                const y2 = roundYs[i + 1];
-                
-                if (y2 === undefined) { // Handle odd number of players in a round (winner from bye)
-                    nextRoundYs.push(y1);
-                    doc.line(currentX, y1, currentX + horizontalGap / 2, y1);
+        while (roundPositions.length > 1) {
+            const nextRoundPositions: {x: number, y: number}[] = [];
+            for (let i = 0; i < roundPositions.length; i += 2) {
+                const pos1 = roundPositions[i];
+                const pos2 = roundPositions[i + 1];
+
+                const player1 = finalPlayerOrder[i];
+                const player2 = finalPlayerOrder[i+1];
+
+                if (pos2 === undefined) { // Winner from a previous bye
+                    const nextX = currentX + horizontalGap;
+                    doc.line(currentX, pos1.y, nextX, pos1.y);
+                    nextRoundPositions.push({ x: nextX, y: pos1.y });
                     continue;
                 }
+                
+                const midY = (pos1.y + pos2.y) / 2;
+                const nextX = currentX + horizontalGap;
+                
+                doc.line(currentX, pos1.y, currentX + horizontalGap / 2, pos1.y);
+                doc.line(currentX, pos2.y, currentX + horizontalGap / 2, pos2.y);
+                doc.line(currentX + horizontalGap / 2, pos1.y, currentX + horizontalGap / 2, pos2.y);
+                doc.line(currentX + horizontalGap / 2, midY, nextX, midY);
 
-                const midY = (y1 + y2) / 2;
-                nextRoundYs.push(midY);
-                // Vertical connector
-                doc.line(currentX, y1, currentX, y2);
-                // Horizontal line to next round
-                doc.line(currentX, midY, currentX + horizontalGap / 2, midY);
+                nextRoundPositions.push({ x: nextX, y: midY });
             }
-            roundYs = nextRoundYs;
-            currentX += horizontalGap / 2;
+            roundPositions = nextRoundPositions;
+            currentX += horizontalGap;
             round++;
-        }
-        // Final winner's line
-        if(roundYs.length === 1) {
-            doc.line(currentX, roundYs[0], currentX + horizontalGap, roundYs[0]);
         }
     });
 
