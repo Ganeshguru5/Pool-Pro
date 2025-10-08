@@ -151,152 +151,142 @@ export default function PoolsManager({ competition, participants, setParticipant
     const pageWidth = doc.internal.pageSize.getWidth();
     const pageHeight = doc.internal.pageSize.getHeight();
     const { ageCategoryName, weightCategoryName, weightCategoryDescription } = getCategoryInfo(competition.age_category, competition.weight_category);
-  
+    
     pools.forEach(([poolName, poolParticipants], poolIndex) => {
-      if (poolName === 'unassigned' || poolParticipants.length === 0) return;
-  
-      const isFirstPage = poolIndex === 0 || (poolIndex > 0 && pools[0][0] === 'unassigned' && pools[0][1].length === 0 && poolIndex === 1);
-      if (!isFirstPage) {
-        doc.addPage();
-      }
-  
-      doc.setFontSize(16);
-      doc.setFont('helvetica', 'bold');
-      doc.text(competition.competition_name, pageWidth / 2, 15, { align: 'center' });
-      
-      doc.setFontSize(10);
-      doc.setFont('helvetica', 'normal');
-      if (competition.start_date && !isNaN(new Date(competition.start_date).getTime())) {
-        doc.text(`Date: ${format(new Date(competition.start_date), 'dd/MM/yyyy')}`, pageWidth / 2, 21, { align: 'center' });
-      }
-      doc.text(`Organized by: ${competition.organized_by}`, pageWidth / 2, 27, { align: 'center' });
-      doc.text(competition.address, pageWidth / 2, 33, { align: 'center' });
-  
-      doc.setFontSize(14);
-      doc.setFont('helvetica', 'bold');
-      doc.text(poolName, pageWidth / 2, 43, { align: 'center' });
-      
-      let yPos = 55;
-      doc.setFontSize(12);
-      doc.setFont('helvetica', 'bold');
-      doc.text(`${ageCategoryName} - ${weightCategoryName}`, 14, yPos);
-      if (weightCategoryDescription) {
+        if (poolName === 'unassigned' || poolParticipants.length === 0) return;
+
+        if (poolIndex > 0 && !(poolIndex === 1 && pools[0][0] === 'unassigned' && pools[0][1].length === 0)) {
+            doc.addPage();
+        }
+
+        // HEADING
+        doc.setFontSize(16);
+        doc.setFont('helvetica', 'bold');
+        doc.text(competition.competition_name, pageWidth / 2, 15, { align: 'center' });
+        
         doc.setFontSize(10);
         doc.setFont('helvetica', 'normal');
-        doc.text(`Weight: ${weightCategoryDescription}`, 14, yPos + 5);
-      }
-      
-      const numParticipants = poolParticipants.length;
-      if (numParticipants < 2) {
-        doc.text("Not enough participants to create a bracket.", 14, yPos + 15);
-        return;
-      }
-      
-      const bracketSize = Math.pow(2, Math.ceil(Math.log2(numParticipants)));
-      
-      const distributePlayers = (slots: number, playersToPlace: Participant[]): (Participant | 'BYE')[] => {
-        const playerPositions: (Participant | 'BYE')[] = new Array(slots).fill('BYE');
-        if (playersToPlace.length === 0) return playerPositions;
-        if (playersToPlace.length === 1) {
-            playerPositions[0] = playersToPlace[0];
-            return playerPositions;
+        if (competition.start_date && !isNaN(new Date(competition.start_date).getTime())) {
+            doc.text(`Date: ${format(new Date(competition.start_date), 'dd/MM/yyyy')}`, pageWidth / 2, 21, { align: 'center' });
+        }
+        doc.text(`Organized by: ${competition.organized_by}`, pageWidth / 2, 27, { align: 'center' });
+        doc.text(competition.address, pageWidth / 2, 33, { align: 'center' });
+        
+        doc.setFontSize(14);
+        doc.setFont('helvetica', 'bold');
+        doc.text(poolName, pageWidth / 2, 43, { align: 'center' });
+
+        let yPos = 55;
+        doc.setFontSize(12);
+        doc.setFont('helvetica', 'bold');
+        doc.text(`${ageCategoryName} - ${weightCategoryName}`, 14, yPos);
+
+        if (weightCategoryDescription) {
+            doc.setFontSize(10);
+            doc.setFont('helvetica', 'normal');
+            doc.text(`Weight: ${weightCategoryDescription}`, 14, yPos + 5);
+        }
+
+        yPos += 15;
+
+        // BRACKET LOGIC
+        const numParticipants = poolParticipants.length;
+        if (numParticipants < 2) {
+            doc.text("Not enough participants for a bracket.", 14, yPos);
+            return;
+        }
+
+        const bracketSize = Math.pow(2, Math.ceil(Math.log2(numParticipants)));
+        const byes = bracketSize - numParticipants;
+
+        const seededParticipants: (Participant | 'BYE')[] = [...poolParticipants, ...Array(byes).fill('BYE')];
+        
+        // Seeding logic to distribute players
+        const distribute = (players: (Participant | 'BYE')[]): (Participant | 'BYE')[] => {
+            if (players.length <= 2) {
+                return players;
+            }
+            const top = [];
+            const bottom = [];
+            for (let i = 0; i < players.length; i++) {
+                if (i % 2 === 0) {
+                    top.push(players[i]);
+                } else {
+                    bottom.push(players[i]);
+                }
+            }
+            return [...distribute(top), ...distribute(bottom)];
         }
         
-        const mid = Math.ceil(slots / 2);
-        const topPlayers = playersToPlace.slice(0, Math.ceil(playersToPlace.length / 2));
-        const bottomPlayers = playersToPlace.slice(Math.ceil(playersToPlace.length / 2));
+        const finalPlayerOrder = distribute(seededParticipants);
 
-        const topPositions = distributePlayers(mid, topPlayers);
-        const bottomPositions = distributePlayers(slots - mid, bottomPlayers);
+        const playerBoxHeight = 12;
+        const verticalGap = 4;
+        const playerBoxWidth = 60;
+        const horizontalGap = 20;
+        const startX = 14;
+        const totalBracketHeight = bracketSize * (playerBoxHeight + verticalGap);
+        
+        if (yPos + totalBracketHeight > pageHeight - 10) {
+          yPos = 15; // Reset for new page if it overflows
+        }
+        
+        let roundYs: number[] = [];
+        // Draw first round participants
+        for (let i = 0; i < bracketSize; i++) {
+            const player = finalPlayerOrder[i];
+            const boxY = yPos + i * (playerBoxHeight + verticalGap);
+            const lineY = boxY + playerBoxHeight / 2;
+            
+            roundYs.push(lineY);
 
-        return [...topPositions, ...bottomPositions];
-      };
+            doc.rect(startX, boxY, playerBoxWidth, playerBoxHeight);
 
-      const finalPlayerOrder = distributePlayers(bracketSize, [...poolParticipants]);
+            if (player !== 'BYE') {
+                doc.setFontSize(8);
+                doc.text(`${i + 1} ${player.district}`, startX + 2, boxY + 4);
+                doc.text(player.name, startX + 2, boxY + 8);
+            }
+            // Horizontal line from box
+            doc.line(startX + playerBoxWidth, lineY, startX + playerBoxWidth + horizontalGap / 2, lineY);
+        }
 
-      const playerBoxHeight = 10;
-      const verticalGap = 4;
-      const playerBoxWidth = 60;
-      const horizontalGap = 20;
-      const startX = 14;
-      let startY = yPos + 15;
+        // Draw subsequent rounds
+        let round = 1;
+        let currentX = startX + playerBoxWidth + horizontalGap / 2;
 
-      const totalHeight = bracketSize * (playerBoxHeight + verticalGap);
-      if (startY + totalHeight > pageHeight - 20) {
-        startY = 15;
-        doc.addPage();
-        yPos = 15;
-      }
-      
-      const firstRoundYPositions: number[] = [];
-      finalPlayerOrder.forEach((p, i) => {
-        const boxY = startY + i * (playerBoxHeight + verticalGap);
-        const lineY = boxY + playerBoxHeight / 2;
-        firstRoundYPositions.push(lineY);
-      });
+        while (roundYs.length > 1) {
+            const nextRoundYs: number[] = [];
+            for (let i = 0; i < roundYs.length; i += 2) {
+                const y1 = roundYs[i];
+                const y2 = roundYs[i + 1];
+                
+                if (y2 === undefined) { // Handle odd number of players in a round (winner from bye)
+                    nextRoundYs.push(y1);
+                    doc.line(currentX, y1, currentX + horizontalGap / 2, y1);
+                    continue;
+                }
 
-      const drawBracket = (roundNum: number, yCoords: number[]) => {
-          if (yCoords.length <= 1) {
-              const winnerX = startX + playerBoxWidth + (roundNum - 1) * (horizontalGap / 2);
-              const winnerY = yCoords[0];
-              if(winnerY) {
-                doc.line(winnerX, winnerY, winnerX + horizontalGap, winnerY);
-              }
-              return;
-          }
-      
-          const nextRoundYCoords: number[] = [];
-          const currentX = startX + playerBoxWidth + (roundNum - 1) * (horizontalGap / 2);
-      
-          for (let i = 0; i < yCoords.length; i += 2) {
-              const y1 = yCoords[i];
-              const y2 = yCoords[i+1];
-              
-              if(y1 === undefined) continue;
-
-              if (y2 === undefined) { // Handles a BYE
-                  doc.line(currentX, y1, currentX + horizontalGap / 2, y1);
-                  nextRoundYCoords.push(y1);
-                  continue;
-              }
-
-              const midY = (y1 + y2) / 2;
-      
-              doc.line(currentX, y1, currentX, y2);
-              doc.line(currentX, midY, currentX + horizontalGap/2, midY);
-      
-              nextRoundYCoords.push(midY);
-          }
-      
-          drawBracket(roundNum + 1, nextRoundYCoords);
-      };
-
-      // Draw initial players and their boxes
-      finalPlayerOrder.forEach((p, i) => {
-          const boxY = startY + i * (playerBoxHeight + verticalGap);
-          const lineY = boxY + playerBoxHeight / 2;
-
-          doc.rect(startX, boxY, playerBoxWidth, playerBoxHeight);
-          
-          doc.setFontSize(8);
-          if (p !== 'BYE') {
-              const text = `${i+1} ${p.district}`;
-              doc.text(text, startX + 2, lineY - 1);
-              doc.text(p.name, startX + 2, lineY + 3);
-          } else {
-            // Do not draw 'BYE' text
-          }
-
-          // Draw line out from box
-          doc.line(startX + playerBoxWidth, lineY, startX + playerBoxWidth + horizontalGap / 2, lineY);
-      });
-
-      drawBracket(2, firstRoundYPositions);
-
+                const midY = (y1 + y2) / 2;
+                nextRoundYs.push(midY);
+                // Vertical connector
+                doc.line(currentX, y1, currentX, y2);
+                // Horizontal line to next round
+                doc.line(currentX, midY, currentX + horizontalGap / 2, midY);
+            }
+            roundYs = nextRoundYs;
+            currentX += horizontalGap / 2;
+            round++;
+        }
+        // Final winner's line
+        if(roundYs.length === 1) {
+            doc.line(currentX, roundYs[0], currentX + horizontalGap, roundYs[0]);
+        }
     });
-  
+
     doc.save(`${competition.competition_name}_pools.pdf`);
-  };
+};
+
 
   const handleExportExcel = () => {
     const wb = XLSX.utils.book_new();
